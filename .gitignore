@@ -1,2 +1,6 @@
 .vscode
 *__pycache__*
+checkpoints/*
+parameters/*
+torch_tf-2019-02/*
+datasets/*
