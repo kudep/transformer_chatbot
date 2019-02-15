@@ -139,6 +139,7 @@ class Trainer:
 
             # optimization
             full_loss = (batch_lm_loss * self.lm_weight + self.risk_weight * batch_risk_loss + batch_loss) / self.batch_split
+            full_loss.backward()
 
             if (i + 1) % self.batch_split == 0:
                 if self.clip_grad is not None:

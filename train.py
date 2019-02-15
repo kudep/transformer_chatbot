@@ -94,13 +94,10 @@ def load_from_bert(model, n_embeddings, model_config):
         if name == 'embeddings':
             array = array[:n_embeddings]  # slicing of embeddings
         if name == 'type_embeddings':
-            mean_type_emb = array.mean(axis=0) 
+            mean_type_emb = array.mean(axis=0)
             new_array = np.stack([mean_type_emb]*model_config.type_vocab_size)
             start_index = model_config.type_vocab_size//2 - array.shape[0]//2
             new_array[start_index:start_index+array.shape[0]] = array
-            print(f'mean_type_emb {mean_type_emb[::256]}')
-            print(f'new_array {new_array[:,::256]}')
-            print(f'array {array[:,::256]}')
             array = new_array
 
         if pointer.shape != array.shape and not ('self_attn_' in name):
@@ -132,7 +129,6 @@ def main():
 
     set_seed(trainer_config.seed)
     device = torch.device(trainer_config.device)
-    print(device)
 
     if trainer_config.first_load_from_tf_bert:
         path = '/home/den/Documents/chit-chat_2019/models/bert_models/rubert_cased_L-12_H-768_A-12/std_lm_vocab.txt'
@@ -163,7 +159,12 @@ def main():
                                    diversity_groups=model_config.diversity_groups,
                                    bert_mode=model_config.bert_mode,
                                    type_vocab_size=model_config.type_vocab_size,
-                                   tie_weights=model_config.tie_weights
+                                   tie_weights=model_config.tie_weights,
+                                   info_bos_id=vocab.info_bos_id,
+                                   talker1_bos_id=vocab.talker1_bos_id,
+                                   talker2_bos_id=vocab.talker2_bos_id,
+                                   bos_token_id=vocab.bos_id,
+                                   sep_token_id=vocab.sep_id,
                                    )
 
     if trainer_config.first_load_from_tf_bert:

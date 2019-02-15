@@ -76,11 +76,11 @@ class TransformerModel(nn.Module):
                                                     sep_token_id=sep_token_id
                                                     )
         self.pre_softmax = nn.Linear(embeddings_size, n_embeddings, bias=False)
-        self.pre_softmax.weight = self.transformer_module.embeddings.weight
-        # if tie_weights:
-        #     self.pre_softmax.weight = self.transformer_module.embeddings.weight
-        # else:
-        #     torch.nn.init.xavier_uniform(self.pre_softmax.weight)
+        # self.pre_softmax.weight = self.transformer_module.embeddings.weight
+        if tie_weights:
+            self.pre_softmax.weight = self.transformer_module.embeddings.weight
+        else:
+            torch.nn.init.xavier_uniform(self.pre_softmax.weight)
 
     def forward(self, x, contexts=[]):
         enc_contexts = [self.encode(c) for c in contexts]
