@@ -276,10 +276,13 @@ class TransformerModule(nn.Module):
         positions = torch.cumsum(~padding_mask, dim=-1, dtype=torch.long)
 
         if self.bert_mode:
-            # types = self._gen_type_embed_inds(x)
-            # x = self.embeddings(x) + self.pos_embeddings(positions) + self.type_embeddings(types)
-            x = self.embeddings(x) + self.pos_embeddings(positions)  # + self.type_embeddings(types)
-            x = self.embed_norm(x)
+            if self.n_segments:
+                types = self._gen_type_embed_inds(x)
+                x = self.embeddings(x) + self.pos_embeddings(positions) + self.type_embeddings(types)
+                x = self.embed_norm(x)
+            else:
+                x = self.embeddings(x) + self.pos_embeddings(positions)
+                x = self.embed_norm(x)
         else:
             positions.masked_fill_(padding_mask, self.pos_embeddings.padding_idx)
             x = self.embeddings(x) * math.sqrt(self.embeddings.embedding_dim) + self.pos_embeddings(positions)
@@ -287,14 +290,8 @@ class TransformerModule(nn.Module):
 
         enc_contexts = sum(enc_contexts, ())
 
-        if self.n_segments is not None:
-            padding_mask = padding_mask.float()  # fucking checkpoint_sequential
-            padding_mask.requires_grad_()  # fucking checkpoint_sequential
-            out = checkpoint_sequential(self.layers, self.n_segments, x, padding_mask, *enc_contexts)
+        for layer in self.layers:
+            out = layer(x, padding_mask, *enc_contexts)
             x = out[0]
-        else:
-            for layer in self.layers:
-                out = layer(x, padding_mask, *enc_contexts)
-                x = out[0]
 
         return x, padding_mask

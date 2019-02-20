@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 
 def load_from_bert(model, n_embeddings, model_config, trainer_config):
-    tf_path = trainer_config.tf_bert_model_parameters
+    tf_path = trainer_config.tf_bert_model_load_from
     init_vars = tf.train.list_variables(tf_path)
     names = []
     arrays = []

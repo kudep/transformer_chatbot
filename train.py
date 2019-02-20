@@ -22,11 +22,12 @@ def main():
     set_seed(trainer_config.seed)
     device = torch.device(trainer_config.device)
 
-    if trainer_config.first_load_from_tf_bert:
-        logger.info('Vocab loaded from {}'.format(trainer_config.bert_vocab))
-        vocab = BertBPEVocab.from_files(trainer_config.bert_vocab)
-    else:
+    if model_config.openai_bpe_vocab:
+        logger.info('Vocab loaded from {}'.format(trainer_config.bpe_vocab_path))
         vocab = BPEVocab.from_files(model_config.bpe_vocab_path, model_config.bpe_codes_path)
+    else:
+        logger.info('Bert bpe vocab  loaded from {}'.format(trainer_config.bert_vocab))
+        vocab = BertBPEVocab.from_files(trainer_config.bert_vocab)
 
     transformer = TransformerModel(n_layers=model_config.n_layers,
                                    n_embeddings=len(vocab),
@@ -58,15 +59,15 @@ def main():
                                    sep_token_id=vocab.sep_id,
                                    )
 
-    if not (trainer_config.load_last) and trainer_config.first_load_from_tf_bert:
-        logger.info('Weights loaded from {}'.format(trainer_config.tf_bert_model_parameters))
-        load_from_bert(transformer.transformer_module, len(vocab), model_config, trainer_config)
-
-    if not (trainer_config.load_last or trainer_config.first_load_from_tf_bert):
-        load_openai_weights(transformer.transformer_module,
-                            trainer_config.openai_parameters_dir,
-                            n_special_tokens=vocab.n_special_tokens)
-        logger.info('OpenAI weights loaded from {}'.format(trainer_config.openai_parameters_dir))
+    if not (trainer_config.bare_model or trainer_config.load_last):
+        if trainer_config.openai_gpt_model_load_from:
+            logger.info('OpenAI weights loading from {}'.format(trainer_config.openai_parameters_dir))
+            load_openai_weights(transformer.transformer_module,
+                                trainer_config.openai_parameters_dir,
+                                n_special_tokens=vocab.n_special_tokens)
+        else:
+            logger.info('Weights loading from {}'.format(trainer_config.tf_bert_model_load_from))
+            load_from_bert(transformer.transformer_module, len(vocab), model_config, trainer_config)
 
     test_dataset = FacebookDataset(trainer_config.test_datasets,
                                    vocab,
@@ -97,9 +98,9 @@ def main():
                             )
 
     if trainer_config.load_last:
+        logger.info('Weights loading from {}'.format(trainer_config.last_checkpoint_path))
         state_dict = torch.load(trainer_config.last_checkpoint_path, map_location=device)
         model_trainer.load_state_dict(state_dict)
-        logger.info('Weights loaded from {}'.format(trainer_config.last_checkpoint_path))
 
     # helpers -----------------------------------------------------
 

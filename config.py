@@ -8,6 +8,8 @@ import pathlib
 import datetime
 import pprint
 from tensorboardX import SummaryWriter
+import sys
+
 
 import logging
 logFormatter = '%(asctime)s - %(levelname)s - %(message)s'
@@ -28,7 +30,11 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-s', '--signature', default='default_model')
 parser.add_argument('-t', '--tie_weights', default=True, type=str2bool)
 parser.add_argument('-v', '--path2bert_vocab', default='./supply/rubert_cased_L-12_H-768_A-12/std_lm_vocab.40k.txt')
-parser.add_argument('-p', '--tf_bert_model_parameters', default='./supply/rubert_cased_L-12_H-768_A-12/bert_model.ckpt')
+parser.add_argument('-p', '--tf_bert_model_load_from', default='./supply/rubert_cased_L-12_H-768_A-12/bert_model.ckpt')
+parser.add_argument('-o', '--openai_gpt_model_load_from', default='')
+parser.add_argument('--openai_bpe_vocab', default=False, type=str2bool)
+parser.add_argument('--bare_model', default=False, type=str2bool)
+parser.add_argument('--segment_embedding', default=False, type=str2bool)
 parser.add_argument('-l', '--load_last', default=True, type=str2bool)
 parser.add_argument('-b', '--bert_mode', default=True, type=str2bool)
 parser.add_argument('-w', '--lr_warmup', default=16000, type=int)
@@ -50,14 +56,15 @@ handler.setFormatter(formatter)
 # add the handlers to the logger
 logging.getLogger('').addHandler(handler)
 
+logger.info(' '.join(['python'] + sys.argv))
 logger.info('Variable config: {}'.format(pprint.pformat(args)))
 writer = SummaryWriter(f'tensorboards/{str(args.signature)}')
-
 
 def get_model_config():
     default_config = openai_transformer_config()
     config = AttrDict({'bpe_vocab_path': './parameters/bpe.vocab',
                        'bpe_codes_path': './parameters/bpe.code',
+                       'openai_bpe_vocab': args.openai_bpe_vocab,
                        'checkpoint_path': './checkpoints/last_checkpoint',
                        'n_layers': default_config.n_layers,
                        'n_pos_embeddings': 512,
@@ -75,7 +82,7 @@ def get_model_config():
                        'annealing_topk': None,
                        'annealing': 0,
                        'length_penalty': 0.6,
-                       'n_segments': None,
+                       'n_segments': args.segment_embedding,
                        'bert_mode': args.bert_mode,
                        'type_vocab_size': 4,
                        'tie_weights': args.tie_weights,
@@ -84,8 +91,8 @@ def get_model_config():
 
 
 def get_trainer_config():
-    train_files = glob.glob(args.train_from)
-    valid_files = glob.glob(args.valid_from)
+    train_files = glob.glob(args.train_from)[:5]
+    valid_files = glob.glob(args.valid_from)[:5]
     config = AttrDict({'n_epochs': 1000,
                        'batch_size': 256,
                        'batch_split': 128,
@@ -100,8 +107,9 @@ def get_trainer_config():
                        'seed': 0,
                        'device': args.device,
                        'load_last': args.load_last,
-                       'first_load_from_tf_bert': True,
-                       'tf_bert_model_parameters': args.tf_bert_model_parameters,
+                       'bare_model': args.bare_model,
+                       'tf_bert_model_load_from': args.tf_bert_model_load_from,
+                       'openai_gpt_model_load_from': args.openai_gpt_model_load_from,
                        'bert_vocab': args.path2bert_vocab,
                        'openai_parameters_dir': './parameters',
                        'last_checkpoint_path': './checkpoints/last_checkpoint',
