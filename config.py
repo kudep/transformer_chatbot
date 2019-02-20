@@ -130,6 +130,8 @@ def get_config():
     experiment_path = pathlib.Path('./experiments') / signature
     model_config.checkpoint_path = str(experiment_path / model_config.checkpoint_path)
     trainer_config.last_checkpoint_path = str(experiment_path / trainer_config.last_checkpoint_path)
+    trainer_config.load_last = trainer_config.load_last and pathlib.Path(trainer_config.last_checkpoint_path).is_file()
+
     trainer_config.interrupt_checkpoint_path = str(experiment_path / trainer_config.interrupt_checkpoint_path)
     (experiment_path / 'checkpoints').mkdir(parents=True, exist_ok=True)
     return model_config, trainer_config
