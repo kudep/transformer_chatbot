@@ -60,6 +60,7 @@ logger.info(' '.join(['python'] + sys.argv))
 logger.info('Variable config: {}'.format(pprint.pformat(args)))
 writer = SummaryWriter(f'tensorboards/{str(args.signature)}')
 
+
 def get_model_config():
     default_config = openai_transformer_config()
     config = AttrDict({'bpe_vocab_path': './parameters/bpe.vocab',
@@ -91,8 +92,8 @@ def get_model_config():
 
 
 def get_trainer_config():
-    train_files = glob.glob(args.train_from)[:5]
-    valid_files = glob.glob(args.valid_from)[:5]
+    train_files = glob.glob(args.train_from)
+    valid_files = glob.glob(args.valid_from)
     config = AttrDict({'n_epochs': 1000,
                        'batch_size': 256,
                        'batch_split': 128,
