@@ -18,6 +18,10 @@ import random
 import torch
 from torch.utils.data import Dataset
 from .text import BPEVocab
+import traceback
+
+import logging
+logger = logging.getLogger(__name__)
 
 
 class FacebookDataset(Dataset):
@@ -95,7 +99,12 @@ class FacebookDataset(Dataset):
             persona_info = [self.vocab.info_bos_id] + persona_info[:self.max_lengths-2] + [self.vocab.info_eos_id]
 
         dialog_begin = 0
-        dialog_end = random.randrange(2, len(dialog)+1, 2)
+        try:
+            dialog_end = random.randrange(2, len(dialog)+1, 2)
+        except:
+            logger.warning(traceback.format_exc())
+            logger.warning(dialog)
+            dialog_end = 0
 
         h = []
         if self.sep_id_enable and persona_info:
@@ -110,8 +119,28 @@ class FacebookDataset(Dataset):
             h.extend(ids)
         h = h[-self.max_lengths:]
         
-
-        y = [self.vocab.bos_id] + dialog[dialog_end-1] + [self.vocab.eos_id]
+        try:
+            y = [self.vocab.bos_id] + dialog[dialog_end-1] + [self.vocab.eos_id]
+        except:
+            logger.warning(traceback.format_exc())
+            logger.warning(dialog)
+            y = [self.vocab.bos_id] + [self.vocab.eos_id]
         y = y[:self.max_lengths]
 
         return persona_info, h, y
+
+
+# # %%
+
+# import traceback
+
+# def run_user_code():
+#     try:
+#         assert False
+#     except:
+#         print("Exception in user code:")
+#         print('-'*60)
+#         print(traceback.format_exc())
+#         print('-'*60)
+
+# run_user_code()

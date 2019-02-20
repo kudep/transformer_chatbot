@@ -24,6 +24,12 @@ from .utils import pad_sequence
 from .optim import Adam, NoamOpt
 from .loss import LabelSmoothingLoss
 
+import time
+
+
+from tensorboardX import SummaryWriter
+import logging
+logger = logging.getLogger(__name__)
 tqdm.monitor_interval = 0
 
 
@@ -31,7 +37,7 @@ class Trainer:
     def __init__(self, model, train_dataset, test_dataset=None, batch_size=8,
                  batch_split=1, lm_weight=0.5, risk_weight=0, lr=6.25e-5, lr_warmup=2000,
                  n_jobs=0, clip_grad=None, label_smoothing=0, device=torch.device('cuda'),
-                 ignore_idxs=[]):
+                 ignore_idxs=[], tb_writer=None):
         self.model = model.to(device)
         self.lm_criterion = nn.CrossEntropyLoss(ignore_index=self.model.padding_idx).to(device)
         self.criterion = LabelSmoothingLoss(n_labels=self.model.n_embeddings, smoothing=label_smoothing, ignore_index=self.model.padding_idx).to(device)
@@ -50,6 +56,7 @@ class Trainer:
         self.clip_grad = clip_grad
         self.device = device
         self.ignore_idxs = ignore_idxs
+        self.tb_writer = tb_writer if tb_writer is not None else SummaryWriter('tensorboards')
 
     def state_dict(self):
         return {'model': self.model.state_dict(),
@@ -153,6 +160,23 @@ class Trainer:
             risk_loss = (i * risk_loss + batch_risk_loss.item()) / (i + 1)
 
             tqdm_data.set_postfix({'lm_loss': lm_loss, 'loss': loss, 'risk_loss': risk_loss})
+            self.tb_writer.add_scalar('train/lm_loss', lm_loss)
+            self.tb_writer.add_scalar('train/risk_loss', risk_loss)
+            self.tb_writer.add_scalar('train/loss', loss)
+
+    def _get_timeout(self, start=False, paticient=10, timeout=2):
+        if start:
+            self.base_paticient = paticient
+            self.paticient = paticient
+            self.timeout = timeout
+            self.last = time.time()
+        current = time.time()
+        if timeout > (current - self.last):
+            self.paticient = min(self.paticient+1, self.base_paticient)
+        if timeout <= (current - self.last):
+            self.paticient -= 1
+        self.last = time.time()
+        return self.paticient <= 0
 
     def _eval_test(self, metric_funcs={}):
         self.model.eval()
@@ -161,7 +185,12 @@ class Trainer:
         loss = 0
         lm_loss = 0
         metrics = {name: 0 for name in metric_funcs.keys()}
+        self._get_timeout(True)
+
         for i, (contexts, targets) in enumerate(tqdm_data):
+            if self._get_timeout():
+                logger.info(f"Timeout on step: {i}")
+                break
             contexts, targets = [c.to(self.device) for c in contexts], targets.to(self.device)
 
             enc_contexts = []
@@ -196,6 +225,12 @@ class Trainer:
                 metrics[name] = (metrics[name] * i + score) / (i + 1)
 
             tqdm_data.set_postfix(dict({'lm_loss': lm_loss, 'loss': loss}, **metrics))
+            self.tb_writer.add_scalar('test/lm_loss', lm_loss)
+            self.tb_writer.add_scalar('test/loss', loss)
+            for k, v in metrics.items():
+                self.tb_writer.add_scalar(f'test/{k}', v)
+
+        logger.info(f"Test: {dict({'lm_loss': lm_loss, 'loss': loss}, **metrics)}")
 
     def test(self, metric_funcs={}):
         if hasattr(self, 'test_dataloader'):
@@ -204,6 +239,7 @@ class Trainer:
     def train(self, epochs, after_epoch_funcs=[], risk_func=None):
         for epoch in range(epochs):
             self._eval_train(epoch, risk_func)
+            logger.info(f"End of epoch # {epoch}")
 
             for func in after_epoch_funcs:
                 func(epoch)

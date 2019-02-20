@@ -4,3 +4,7 @@ checkpoints/*
 parameters/*
 torch_tf-2019-02/*
 datasets/*
+logs/*
+experiments/*
+supply/*
+tensorboards/*
