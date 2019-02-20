@@ -1,6 +1,6 @@
 signature=$1
-bert_dir='supply/rubert_cased_L-12_H-768_A-12'
-# bert_dir='supply/rubert_cased_L-12_H-768_A-12_v2'
+# bert_dir='supply/rubert_cased_L-12_H-768_A-12'
+bert_dir='supply/rubert_cased_L-12_H-768_A-12_v2'
 case "$signature" in
 
  "bare_test_v40k" )
