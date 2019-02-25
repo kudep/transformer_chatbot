@@ -9,7 +9,7 @@ import datetime
 import pprint
 from tensorboardX import SummaryWriter
 import sys
-
+import random
 
 import logging
 logFormatter = '%(asctime)s - %(levelname)s - %(message)s'
@@ -93,6 +93,7 @@ def get_model_config():
 
 def get_trainer_config():
     train_files = glob.glob(args.train_from)
+    random.shuffle(train_files)
     valid_files = glob.glob(args.valid_from)
     config = AttrDict({'n_epochs': 1000,
                        'batch_size': 256,

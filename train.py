@@ -105,6 +105,7 @@ def main():
     # helpers -----------------------------------------------------
 
     def save_func(epoch):
+        torch.save(model_trainer.state_dict(), trainer_config.last_checkpoint_path+f'_ep-{epoch}')
         torch.save(model_trainer.state_dict(), trainer_config.last_checkpoint_path)
 
     def sample_text_func(epoch):
@@ -147,10 +148,12 @@ def main():
     # helpers -----------------------------------------------------
 
     try:
+        if trainer_config.load_last:
+            save_func(0)
+            sample_text_func(0)
+            test_func(0)
+
         model_trainer.train(trainer_config.n_epochs, after_epoch_funcs=[save_func, sample_text_func, test_func], risk_func=f1_risk)
-        # model_trainer.train(trainer_config.n_epochs, after_epoch_funcs=[save_func, sample_text_func], risk_func=f1_risk)
-        # sample_text_func(0)
-        # model_trainer.train(trainer_config.n_epochs, after_epoch_funcs=[sample_text_func, test_func], risk_func=f1_risk)
     except (KeyboardInterrupt, Exception, RuntimeError) as e:
         torch.save(model_trainer.state_dict(), trainer_config.interrupt_checkpoint_path)
         raise e
