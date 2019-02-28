@@ -21,7 +21,8 @@ from .text import BPEVocab
 import traceback
 from multiprocessing import Pool
 import tqdm
-
+import pickle
+import pathlib
 import logging
 logger = logging.getLogger(__name__)
 
@@ -80,7 +81,7 @@ class FacebookDataset:
             dialog = dialog[:-1]
         return (persona_info, dialog)
 
-    def __init__(self, paths, vocab, max_lengths=2048, min_infos=2, sep_id_enable=False, cpu_n=4):
+    def __init__(self, paths, vocab, max_lengths=2048, min_infos=2, sep_id_enable=False, cpu_n=4, cache_file=''):
         assert min_infos > 0
 
         if isinstance(paths, str):
@@ -91,11 +92,17 @@ class FacebookDataset:
         self.min_infos = min_infos
         self.sep_id_enable = sep_id_enable
 
-        parsed_data = sum(FacebookDataset.run_pool(paths, FacebookDataset.parse_data, cpu_n), [])
+        if pathlib.Path(cache_file).is_file():
+            with open(cache_file, 'rb') as f:
+                self.data = pickle.load(f)
+        else:
+            parsed_data = sum(FacebookDataset.run_pool(paths, FacebookDataset.parse_data, cpu_n), [])
 
-        self.data = FacebookDataset.run_pool(parsed_data,
-                                             FacebookDataset.make_dataset,
-                                             cpu_n, ext_args=vocab)
+            self.data = FacebookDataset.run_pool(parsed_data,
+                                                 FacebookDataset.make_dataset,
+                                                 cpu_n, ext_args=vocab)
+            with open(cache_file, 'wb') as f:
+                pickle.dump(self.data, f)
 
     def __len__(self):
         return len(self.data)

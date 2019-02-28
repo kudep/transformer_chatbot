@@ -74,7 +74,8 @@ def main():
                                    vocab,
                                    transformer.n_pos_embeddings - 1,
                                    sep_id_enable=model_config.sep_id_enable,
-                                   cpu_n=trainer_config.n_jobs
+                                   cpu_n=trainer_config.n_jobs,
+                                   cache_file=trainer_config.test_datasets_cache,
                                    )
 
     logger.info('Train data loading ')
@@ -82,7 +83,8 @@ def main():
                                     vocab,
                                     transformer.n_pos_embeddings - 1,
                                     sep_id_enable=model_config.sep_id_enable,
-                                    cpu_n=trainer_config.n_jobs
+                                    cpu_n=trainer_config.n_jobs,
+                                    cache_file=trainer_config.train_datasets_cache,
                                     )
 
     model_trainer = Trainer(transformer,

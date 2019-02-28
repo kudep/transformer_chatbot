@@ -93,8 +93,10 @@ def get_model_config():
 
 def get_trainer_config():
     train_files = glob.glob(args.train_from)
+    train_hash = hashlib.md5(str(train_files).encode()).hexdigest()[:4]
     random.shuffle(train_files)
-    valid_files = glob.glob(args.valid_from)
+    test_files = glob.glob(args.valid_from)
+    test_hash = hashlib.md5(str(test_files).encode()).hexdigest()[:4]
     config = AttrDict({'n_epochs': 1000,
                        'batch_size': 256,
                        'batch_split': 128,
@@ -102,7 +104,7 @@ def get_trainer_config():
                        'lr_warmup': args.lr_warmup,
                        'lm_weight': args.lm_weight,
                        'risk_weight': args.risk_weight,
-                       'n_jobs': 20,
+                       'n_jobs': 40,
                        'label_smoothing': 0.1,
                        'clip_grad': None,
                        'test_period': 1,
@@ -117,12 +119,14 @@ def get_trainer_config():
                        'last_checkpoint_path': './checkpoints/last_checkpoint',
                        'interrupt_checkpoint_path': './checkpoints/interrupt_checkpoint',
                        'train_datasets': train_files,
-                       'test_datasets': valid_files,
+                       'train_datasets_cache': f'./datasets/train-{train_hash}.cache',
+                       'test_datasets': test_files,
+                       'test_datasets_cache': f'./datasets/test-{test_hash}.cache',
                        'tb_writer': writer,
                        })
     return config
 
-
+# %%
 def get_config():
     model_config = get_model_config()
     trainer_config = get_trainer_config()
