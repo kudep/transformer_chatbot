@@ -23,7 +23,7 @@ from tqdm import tqdm
 from .utils import pad_sequence
 from .optim import Adam, NoamOpt
 from .loss import LabelSmoothingLoss
-
+import numpy as np
 import time
 
 
@@ -57,14 +57,19 @@ class Trainer:
         self.device = device
         self.ignore_idxs = ignore_idxs
         self.tb_writer = tb_writer if tb_writer is not None else SummaryWriter('tensorboards')
+        self.optimizer._step = 0
+        self.epoch = 0
 
     def state_dict(self):
         return {'model': self.model.state_dict(),
-                'optimizer': self.optimizer.state_dict()}
+                'optimizer': self.optimizer.state_dict(),
+                'epoch': self.epoch,
+                }
 
     def load_state_dict(self, state_dict):
         self.model.load_state_dict(state_dict['model'], strict=False)
         self.optimizer.load_state_dict(state_dict['optimizer'])
+        self.epoch = state_dict.get('epoch', 0)
 
     def collate_func(self, data):
         persona_info, h, y = zip(*data)
@@ -153,6 +158,7 @@ class Trainer:
                     for group in self.optimizer.param_groups:
                         nn.utils.clip_grad_norm_(group['params'], self.clip_grad)
                 self.optimizer.step()
+                self._tb_writer_after_step()
                 self.optimizer.zero_grad()
 
             lm_loss = (i * lm_loss + batch_lm_loss.item()) / (i + 1)
@@ -160,9 +166,54 @@ class Trainer:
             risk_loss = (i * risk_loss + batch_risk_loss.item()) / (i + 1)
 
             tqdm_data.set_postfix({'lm_loss': lm_loss, 'loss': loss, 'risk_loss': risk_loss})
-            self.tb_writer.add_scalar('train/lm_loss', lm_loss)
-            self.tb_writer.add_scalar('train/risk_loss', risk_loss)
-            self.tb_writer.add_scalar('train/loss', loss)
+            if (i + 1) % self.batch_split == 0:
+                self.tb_writer.add_scalar('train/lm_loss', lm_loss, self.optimizer._step)
+                self.tb_writer.add_scalar('train/risk_loss', risk_loss, self.optimizer._step)
+                self.tb_writer.add_scalar('train/loss', loss, self.optimizer._step)
+
+    def _mean4hist(self, component):
+        return component.weight.grad.clone().cpu().data.numpy()
+
+    def _tb_writer_after_step(self):
+        self.tb_writer.add_scalar('optimizer/rate',
+                                  self.optimizer.rate(),
+                                  self.optimizer._step)
+        if self.optimizer._step % 50 == 1:  # it's take 20 seconds.
+            tensors = []
+            embeddings = self._mean4hist(self.model.transformer_module.embeddings)
+            tensors.append(embeddings)
+            self.tb_writer.add_histogram('optimizer/grads/embeddings',
+                                         embeddings,
+                                         self.optimizer._step)
+            if self.model.transformer_module.bert_mode:
+                type_embeddings = self._mean4hist(self.model.transformer_module.type_embeddings)
+                tensors.append(type_embeddings)
+                self.tb_writer.add_histogram('optimizer/grads/type_embeddings',
+                                             type_embeddings,
+                                             self.optimizer._step)
+            pos_embeddings = self._mean4hist(self.model.transformer_module.pos_embeddings)
+            tensors.append(pos_embeddings)
+            self.tb_writer.add_histogram('optimizer/grads/pos_embeddings',
+                                         pos_embeddings,
+                                         self.optimizer._step)
+            pre_softmax = self._mean4hist(self.model.pre_softmax)
+            tensors.append(pre_softmax)
+            self.tb_writer.add_histogram('optimizer/grads/pre_softmax',
+                                         pre_softmax,
+                                         self.optimizer._step)
+            for i, layer in enumerate(self.model.transformer_module.layers, 1):
+                layer_grads = [tensor.grad.clone().cpu().data.numpy() for tensor in layer.parameters()]
+                layer_grads = [tensor.reshape(-1) for tensor in layer_grads]
+                layer_grads = np.concatenate(layer_grads)
+                tensors.append(layer_grads)
+                self.tb_writer.add_histogram(f'optimizer/grads/layer_{i:02d}',
+                                             layer_grads,
+                                             self.optimizer._step)
+            tensors = [tensor.reshape(-1) for tensor in tensors]
+            tensors = np.concatenate(tensors)
+            self.tb_writer.add_histogram(f'optimizer/grads/global',
+                                         tensors,
+                                         self.optimizer._step)
 
     def _get_timeout(self, start=False, paticient=10, timeout=2):
         if start:
@@ -225,11 +276,11 @@ class Trainer:
                 metrics[name] = (metrics[name] * i + score) / (i + 1)
 
             tqdm_data.set_postfix(dict({'lm_loss': lm_loss, 'loss': loss}, **metrics))
-            self.tb_writer.add_scalar('test/lm_loss', lm_loss)
-            self.tb_writer.add_scalar('test/loss', loss)
-            for k, v in metrics.items():
-                self.tb_writer.add_scalar(f'test/{k}', v)
 
+        self.tb_writer.add_scalar('test/lm_loss', lm_loss, self.epoch)
+        self.tb_writer.add_scalar('test/loss', loss, self.epoch)
+        for k, v in metrics.items():
+            self.tb_writer.add_scalar(f'test/{k}', v, self.epoch)
         logger.info(f"Test: {dict({'lm_loss': lm_loss, 'loss': loss}, **metrics)}")
 
     def test(self, metric_funcs={}):
@@ -237,9 +288,10 @@ class Trainer:
             self._eval_test(metric_funcs)
 
     def train(self, epochs, after_epoch_funcs=[], risk_func=None):
-        for epoch in range(epochs):
-            self._eval_train(epoch, risk_func)
-            logger.info(f"End of epoch # {epoch}")
+        for _ in range(epochs):
+            self._eval_train(self.epoch, risk_func)
+            logger.info(f"End of epoch # {self.epoch}")
+            self.epoch += 1
 
             for func in after_epoch_funcs:
-                func(epoch)
+                func(self.epoch)

@@ -5,7 +5,7 @@ case "$signature" in
 
  "bare_test_v40k" )
  python train.py \
-  --lr_warmup 1 \
+  --lr_warmup 16000 \
   --signature bare_test_v40k \
   --segment_embedding 1 \
   --tie_weights 1 \
