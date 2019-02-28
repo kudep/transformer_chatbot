@@ -26,7 +26,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class FacebookDataset(Dataset):
+class FacebookDataset:
     @staticmethod
     def parse_data(path):
         with open(path, 'r', encoding='utf-8') as file:
@@ -60,28 +60,25 @@ class FacebookDataset(Dataset):
             return data
 
     @staticmethod
-    def make_dataset(data, vocab, max_lengths):
-        dataset = []
-        for chat in data:
-            persona_info = [vocab.string2ids(s) for s in chat['persona_info']]
-            dialog = [vocab.string2ids(s) for s in chat['dialog']]
-
-            if len(dialog) % 2 == 1:
-                dialog = dialog[:-1]
-
-            dataset.append((persona_info, dialog))
-
-        return dataset
-
-    @staticmethod
-    def run_pool(files, worker, cpu_n=1):
+    def run_pool(files, worker, cpu_n=1, ext_args=None):
         # Using initializer and  multi_preprocessing functions from this module
+        def init_worker(function):
+            function.ext_args = ext_args
         fin_data = []
-        with Pool(cpu_n) as p:
+        with Pool(cpu_n, initializer=init_worker,  initargs=(worker,)) as p:
             for process_ret in tqdm.tqdm(p.imap_unordered(worker, files), total=len(files)):
                 if process_ret:
                     fin_data.append(process_ret)
         return fin_data
+
+    @staticmethod
+    def make_dataset(data):
+        persona_info = [FacebookDataset.make_dataset.ext_args.string2ids(s) for s in data['persona_info']]
+        dialog = [FacebookDataset.make_dataset.ext_args.string2ids(s) for s in data['dialog']]
+
+        if len(dialog) % 2 == 1:
+            dialog = dialog[:-1]
+        return (persona_info, dialog)
 
     def __init__(self, paths, vocab, max_lengths=2048, min_infos=2, sep_id_enable=False, cpu_n=4):
         assert min_infos > 0
@@ -95,7 +92,10 @@ class FacebookDataset(Dataset):
         self.sep_id_enable = sep_id_enable
 
         parsed_data = sum(FacebookDataset.run_pool(paths, FacebookDataset.parse_data, cpu_n), [])
-        self.data = FacebookDataset.make_dataset(parsed_data, vocab, max_lengths)
+
+        self.data = FacebookDataset.run_pool(parsed_data,
+                                             FacebookDataset.make_dataset,
+                                             cpu_n, ext_args=vocab)
 
     def __len__(self):
         return len(self.data)
