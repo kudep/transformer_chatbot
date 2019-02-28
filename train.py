@@ -69,16 +69,20 @@ def main():
             logger.info('Weights loading from {}'.format(trainer_config.tf_bert_model_load_from))
             load_from_bert(transformer.transformer_module, len(vocab), model_config, trainer_config)
 
+    logger.info('Test data loading ')
     test_dataset = FacebookDataset(trainer_config.test_datasets,
                                    vocab,
                                    transformer.n_pos_embeddings - 1,
-                                   sep_id_enable=model_config.sep_id_enable
+                                   sep_id_enable=model_config.sep_id_enable,
+                                   cpu_n=trainer_config.n_jobs
                                    )
 
+    logger.info('Train data loading ')
     train_dataset = FacebookDataset(trainer_config.train_datasets,
                                     vocab,
                                     transformer.n_pos_embeddings - 1,
-                                    sep_id_enable=model_config.sep_id_enable
+                                    sep_id_enable=model_config.sep_id_enable,
+                                    cpu_n=trainer_config.n_jobs
                                     )
 
     model_trainer = Trainer(transformer,
@@ -105,7 +109,7 @@ def main():
     # helpers -----------------------------------------------------
 
     def save_func(epoch):
-        torch.save(model_trainer.state_dict(), 
+        torch.save(model_trainer.state_dict(),
                    trainer_config.last_checkpoint_path+f'_ep-{epoch}'+f'_st-{model_trainer.optimizer._step}')
         torch.save(model_trainer.state_dict(), trainer_config.last_checkpoint_path)
 
@@ -154,11 +158,11 @@ def main():
             sample_text_func(model_trainer.epoch)
             test_func(model_trainer.epoch)
 
-        model_trainer.train(trainer_config.n_epochs, 
-                            after_epoch_funcs=[save_func, sample_text_func, test_func], 
+        model_trainer.train(trainer_config.n_epochs,
+                            after_epoch_funcs=[save_func, sample_text_func, test_func],
                             risk_func=f1_risk)
     except (KeyboardInterrupt, Exception, RuntimeError) as e:
-        torch.save(model_trainer.state_dict(), 
+        torch.save(model_trainer.state_dict(),
                    trainer_config.interrupt_checkpoint_path+f'_st-{model_trainer.optimizer._step}')
         raise e
 

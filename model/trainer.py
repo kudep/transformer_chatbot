@@ -178,7 +178,7 @@ class Trainer:
         self.tb_writer.add_scalar('optimizer/rate',
                                   self.optimizer.rate(),
                                   self.optimizer._step)
-        if self.optimizer._step % 50 == 1:  # it's take 20 seconds.
+        if self.optimizer._step % 50 == 1:  # it's take 16 seconds.
             tensors = []
             embeddings = self._mean4hist(self.model.transformer_module.embeddings)
             tensors.append(embeddings)

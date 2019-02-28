@@ -19,6 +19,8 @@ import torch
 from torch.utils.data import Dataset
 from .text import BPEVocab
 import traceback
+from multiprocessing import Pool
+import tqdm
 
 import logging
 logger = logging.getLogger(__name__)
@@ -71,7 +73,17 @@ class FacebookDataset(Dataset):
 
         return dataset
 
-    def __init__(self, paths, vocab, max_lengths=2048, min_infos=2, sep_id_enable=False):
+    @staticmethod
+    def run_pool(files, worker, cpu_n=1):
+        # Using initializer and  multi_preprocessing functions from this module
+        fin_data = []
+        with Pool(cpu_n) as p:
+            for process_ret in tqdm.tqdm(p.imap_unordered(worker, files), total=len(files)):
+                if process_ret:
+                    fin_data.append(process_ret)
+        return fin_data
+
+    def __init__(self, paths, vocab, max_lengths=2048, min_infos=2, sep_id_enable=False, cpu_n=4):
         assert min_infos > 0
 
         if isinstance(paths, str):
@@ -82,7 +94,7 @@ class FacebookDataset(Dataset):
         self.min_infos = min_infos
         self.sep_id_enable = sep_id_enable
 
-        parsed_data = sum([FacebookDataset.parse_data(path) for path in paths], [])
+        parsed_data = sum(FacebookDataset.run_pool(paths, FacebookDataset.parse_data, cpu_n), [])
         self.data = FacebookDataset.make_dataset(parsed_data, vocab, max_lengths)
 
     def __len__(self):
@@ -118,7 +130,7 @@ class FacebookDataset(Dataset):
                 h.append(self.vocab.sep_id)
             h.extend(ids)
         h = h[-self.max_lengths:]
-        
+
         try:
             y = [self.vocab.bos_id] + dialog[dialog_end-1] + [self.vocab.eos_id]
         except:

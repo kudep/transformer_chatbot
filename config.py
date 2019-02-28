@@ -102,7 +102,7 @@ def get_trainer_config():
                        'lr_warmup': args.lr_warmup,
                        'lm_weight': args.lm_weight,
                        'risk_weight': args.risk_weight,
-                       'n_jobs': 6,
+                       'n_jobs': 20,
                        'label_smoothing': 0.1,
                        'clip_grad': None,
                        'test_period': 1,
