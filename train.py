@@ -86,7 +86,6 @@ def main():
                                     cpu_n=trainer_config.n_jobs,
                                     cache_file=trainer_config.train_datasets_cache,
                                     )
-
     model_trainer = Trainer(transformer,
                             train_dataset,
                             test_dataset,

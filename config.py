@@ -41,8 +41,9 @@ parser.add_argument('-w', '--lr_warmup', default=16000, type=int)
 parser.add_argument('-m', '--lm_weight', default=0.5, type=float)
 parser.add_argument('-r', '--risk_weight', default=0, type=float)
 parser.add_argument('-d', '--device', default='cuda')
-parser.add_argument('--train_from', default='./datasets/*/*.train.txt')
-parser.add_argument('--valid_from', default='./datasets/*/*.valid.txt')
+parser.add_argument('--train_from', default='./datasets/toloka_dials/*.train.txt')
+parser.add_argument('--valid_from', default='./datasets/toloka_dials/*.valid.txt')
+parser.add_argument('--batch_split', default=256, type=int)
 args = parser.parse_args()
 
 
@@ -99,7 +100,7 @@ def get_trainer_config():
     test_hash = hashlib.md5(str(test_files).encode()).hexdigest()[:4]
     config = AttrDict({'n_epochs': 1000,
                        'batch_size': 256,
-                       'batch_split': 128,
+                       'batch_split': args.batch_split,
                        'lr': 6.25e-5,
                        'lr_warmup': args.lr_warmup,
                        'lm_weight': args.lm_weight,
