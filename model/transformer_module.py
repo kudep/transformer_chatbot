@@ -278,11 +278,11 @@ class TransformerModule(nn.Module):
         if self.bert_mode:
             if self.n_segments:
                 types = self._gen_type_embed_inds(x)
-                x = self.embeddings(x) * math.sqrt(self.embeddings.embedding_dim) + self.pos_embeddings(positions) + self.type_embeddings(types)
-                # x = self.embed_norm(x)
+                x = self.embeddings(x) + self.pos_embeddings(positions) + self.type_embeddings(types)
+                x = self.embed_norm(x)
             else:
-                x = self.embeddings(x) * math.sqrt(self.embeddings.embedding_dim) + self.pos_embeddings(positions)
-                # x = self.embed_norm(x)
+                x = self.embeddings(x) + self.pos_embeddings(positions)
+                x = self.embed_norm(x)
         else:
             positions.masked_fill_(padding_mask, self.pos_embeddings.padding_idx)
             x = self.embeddings(x) * math.sqrt(self.embeddings.embedding_dim) + self.pos_embeddings(positions)

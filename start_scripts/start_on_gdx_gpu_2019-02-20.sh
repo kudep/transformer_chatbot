@@ -91,7 +91,7 @@ case "$signature" in
   --tf_bert_model_load_from ${bert_dir}/model.ckpt-710142 \
   --train_from "datasets/${domain}/*.train.txt" \
   --valid_from "datasets/${domain}/*.valid.txt" \
-  --batch_split 256 \
+  --batch_split 128 \
   --lm_weight ${lambda_lm} \
   --risk_weight ${lambda_risk} \
  ;;
