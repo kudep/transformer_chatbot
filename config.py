@@ -109,7 +109,7 @@ def get_trainer_config():
                        'label_smoothing': 0.1,
                        'clip_grad': None,
                        'test_period': 1,
-                       'seed': 0,
+                       'seed': 31415,
                        'device': args.device,
                        'load_last': args.load_last,
                        'bare_model': args.bare_model,

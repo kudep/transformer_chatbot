@@ -151,7 +151,7 @@ case "$signature" in
   --bare_model 1 \
   --train_from "datasets/${domain}/*.train.txt" \
   --valid_from "datasets/${domain}/*.valid.txt" \
-  --batch_split 256 \
+  --batch_split 128 \
   --lm_weight ${lambda_lm} \
   --risk_weight ${lambda_risk} \
  ;;
