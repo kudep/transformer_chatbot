@@ -61,13 +61,13 @@ class FacebookDataset:
             return data
 
     @staticmethod
-    def run_pool(files, worker, cpu_n=1, ext_args=None):
+    def run_pool(objs, worker, cpu_n=1, ext_args=None):
         # Using initializer and  multi_preprocessing functions from this module
         def init_worker(function):
             function.ext_args = ext_args
         fin_data = []
         with Pool(cpu_n, initializer=init_worker,  initargs=(worker,)) as p:
-            for process_ret in tqdm.tqdm(p.imap_unordered(worker, files), total=len(files)):
+            for process_ret in tqdm.tqdm(p.imap_unordered(worker, objs), total=len(objs)):
                 if process_ret:
                     fin_data.append(process_ret)
         return fin_data
@@ -81,7 +81,38 @@ class FacebookDataset:
             dialog = dialog[:-1]
         return (persona_info, dialog)
 
-    def __init__(self, paths, vocab, max_lengths=2048, min_infos=2, sep_id_enable=False, cpu_n=4, cache_file=''):
+    @staticmethod
+    def make_id_sets(inp):
+        persona_info, dialog = inp
+        return set(sum(persona_info, [])) | set(sum(dialog, []))
+
+    @staticmethod
+    def chunk_generator(items_list, chunk_size):
+        for i in range(0, len(items_list), chunk_size):
+            yield items_list[i:i + chunk_size]
+
+    @staticmethod
+    def merge_sets(sets):
+        while len(sets) > 1:
+            new_sets = []
+            for set_slice in FacebookDataset.chunk_generator(sets, 2):
+                if len(set_slice) == 2:
+                    new_sets.append(set_slice[0] | set_slice[1])
+                else:
+                    new_sets.append(set_slice[0])
+            sets.clear()
+            sets.extend(new_sets)
+        return sets[0]
+
+    def __init__(self,
+                 paths,
+                 vocab,
+                 max_lengths=2048,
+                 min_infos=2,
+                 sep_id_enable=False,
+                 cpu_n=4,
+                 cache_file='',
+                 create_id_set=True):
         assert min_infos > 0
 
         if isinstance(paths, str):
@@ -103,6 +134,18 @@ class FacebookDataset:
                                                  cpu_n, ext_args=vocab)
             with open(cache_file, 'wb') as f:
                 pickle.dump(self.data, f)
+
+        if pathlib.Path(cache_file+'_set').is_file() and create_id_set:
+            with open(cache_file+'_set', 'rb') as f:
+                self.id_set = pickle.load(f)
+        elif create_id_set:
+            id_sets = FacebookDataset.run_pool(self.data,
+                                               FacebookDataset.make_id_sets,
+                                               cpu_n, ext_args=vocab)
+            id_sets.append(set(self.vocab.special_tokens_ids))
+            self.id_set = FacebookDataset.merge_sets(id_sets)
+            with open(cache_file+'_set', 'wb') as f:
+                pickle.dump(self.id_set, f)
 
     def __len__(self):
         return len(self.data)
