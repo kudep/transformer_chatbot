@@ -1,7 +1,7 @@
 signature=$1
-domain=$2
-lambda_lm=$3
-lambda_risk=$4
+domain=${2:-sber_srt}
+lambda_lm=${3:-10} 
+lambda_risk=${4:-0} 
 # bert_dir='supply/rubert_cased_L-12_H-768_A-12'
 bert_dir='supply/rubert_cased_L-12_H-768_A-12_v2'
 case "$signature" in
