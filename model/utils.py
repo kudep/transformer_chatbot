@@ -24,6 +24,8 @@ import torch
 import numpy as np
 from scipy.interpolate import RectBivariateSpline
 from torch.utils.checkpoint import checkpoint
+from scipy.stats import entropy
+from numpy.linalg import norm
 
 
 def set_seed(seed):
@@ -61,6 +63,7 @@ def checkpoint_sequential(functions, segments, *inputs):
             for j in range(start, end + 1):
                 inputs = functions[j](*inputs)
             return inputs
+
         return forward
 
     if isinstance(functions, torch.nn.Sequential):
@@ -90,13 +93,96 @@ def f1_score(predictions, targets, average=True):
         f1 = (2 * precision * recall) / (precision + recall)
 
         return f1
-    
+
     scores = [f1_score_items(p, t) for p, t in zip(predictions, targets)]
 
     if average:
-        return sum(scores) / len(scores)    
+        return sum(scores) / len(scores)
 
     return scores
+
+
+def counter2array(counter):
+    items = list(counter.values())
+    items = np.array(items)
+    return items
+
+
+def to_counter(items):
+    items = [Counter(i) for i in items]
+    counter = sum(items, Counter())
+    return counter
+
+
+predictions_counter = Counter()
+targets_counter = Counter()
+
+
+def update_vocab_counters(predictions, targets):
+
+    predictions_counter.update(to_counter(predictions))
+    targets_counter.update(to_counter(targets))
+
+
+def clear_vocab_counters():
+    predictions_counter.clear()
+    targets_counter.clear()
+
+
+def jsd(P, Q):
+    _P = P / norm(P, ord=1)
+    _Q = Q / norm(Q, ord=1)
+    _M = 0.5 * (_P + _Q)
+    return 0.5 * (entropy(_P, _M) + entropy(_Q, _M))
+
+
+def jsd_intersections():
+    intersections4jsd_array = []
+    targets_counter4jsd_array = []
+    for i in set(predictions_counter) & set(targets_counter):
+        intersections4jsd_array.append(predictions_counter.get(i, 0))
+        targets_counter4jsd_array.append(targets_counter.get(i, 0))
+    intersections4jsd_array = np.array(intersections4jsd_array)
+    targets_counter4jsd_array = np.array(targets_counter4jsd_array)
+    return jsd(intersections4jsd_array, targets_counter4jsd_array)
+
+
+def jsd_common():
+    intersections4jsd_array = []
+    targets_counter4jsd_array = []
+    for i in set(targets_counter):
+        intersections4jsd_array.append(predictions_counter.get(i, 0))
+        targets_counter4jsd_array.append(targets_counter.get(i, 0))
+    intersections4jsd_array = np.array(intersections4jsd_array)
+    targets_counter4jsd_array = np.array(targets_counter4jsd_array)
+    return jsd(intersections4jsd_array, targets_counter4jsd_array)
+
+
+def get_vocab_stats():
+
+    predictions_array = counter2array(predictions_counter)
+    targets_array = counter2array(targets_counter)
+    intersections_counter = predictions_counter & targets_counter
+
+    intersections = {}
+    for i in set(targets_counter):
+        if i in predictions_counter:
+            intersections[i] = predictions_counter[i]
+    intersections_array = counter2array(intersections)
+
+    stats = {
+        # "mean": np.mean(predictions_array) / np.mean(targets_array),
+        # "std": np.std(predictions_array) / np.std(targets_array),
+        "relative_powerset": predictions_array.shape[-1] / targets_array.shape[-1],
+        "powerset": predictions_array.shape[-1],
+        # "intersections_mean": np.mean(intersections_array) / np.mean(targets_array),
+        # "intersections_std": np.std(intersections_array) / np.std(targets_array),
+        "intersections_relative_powerset": intersections_array.shape[-1] / targets_array.shape[-1],
+        "intersections_powerset": intersections_array.shape[-1],
+        "Jensen-Shannon divergence common": jsd_common(),
+        "Jensen-Shannon divergence intersection": jsd_intersections(),
+    }
+    return stats
 
 
 def openai_transformer_config():
@@ -105,9 +191,19 @@ def openai_transformer_config():
         __setattr__ = dict.__setitem__
         __delattr__ = dict.__delitem__
 
-    cfg = dotdict({'n_layers': 12, 'n_embeddings': 40477, 'n_pos_embeddings': 512, 
-                   'embeddings_size': 768, 'n_heads': 12, 'dropout': 0.1,
-                   'embed_dropout': 0.1, 'attn_dropout': 0.1, 'ff_dropout': 0.1})
+    cfg = dotdict(
+        {
+            "n_layers": 12,
+            "n_embeddings": 40477,
+            "n_pos_embeddings": 512,
+            "embeddings_size": 768,
+            "n_heads": 12,
+            "dropout": 0.1,
+            "embed_dropout": 0.1,
+            "attn_dropout": 0.1,
+            "ff_dropout": 0.1,
+        }
+    )
 
     return cfg
 
@@ -115,14 +211,14 @@ def openai_transformer_config():
 def load_openai_weights(model, directory, n_special_tokens=0):
     # TODO: add check of shapes
 
-    parameters_names_path = os.path.join(directory, 'parameters_names.json')
-    parameters_shapes_path = os.path.join(directory, 'parameters_shapes.json')
-    parameters_weights_paths = [os.path.join(directory, 'params_{}.npy'.format(n)) for n in range(10)]
+    parameters_names_path = os.path.join(directory, "parameters_names.json")
+    parameters_shapes_path = os.path.join(directory, "parameters_shapes.json")
+    parameters_weights_paths = [os.path.join(directory, "params_{}.npy".format(n)) for n in range(10)]
 
-    with open(parameters_names_path, 'r') as parameters_names_file:
+    with open(parameters_names_path, "r") as parameters_names_file:
         parameters_names = json.load(parameters_names_file)
 
-    with open(parameters_shapes_path, 'r') as parameters_shapes_file:
+    with open(parameters_shapes_path, "r") as parameters_shapes_file:
         parameters_shapes = json.load(parameters_shapes_file)
 
     parameters_weights = [np.load(path) for path in parameters_weights_paths]
@@ -130,35 +226,33 @@ def load_openai_weights(model, directory, n_special_tokens=0):
     parameters_weights = np.split(np.concatenate(parameters_weights, 0), parameters_offsets)[:-1]
     parameters_weights = [p.reshape(s) for p, s in zip(parameters_weights, parameters_shapes)]
 
-    parameters_weights[1] = parameters_weights[1][1:] # skip 0 - <unk> 
-
+    parameters_weights[1] = parameters_weights[1][1:]  # skip 0 - <unk>
 
     if model.pos_embeddings.num_embeddings - 1 > parameters_weights[0].shape[0]:
         xx = np.linspace(0, parameters_weights[0].shape[0], model.pos_embeddings.num_embeddings - 1)
-        new_kernel = RectBivariateSpline(np.arange(parameters_weights[0].shape[0]),
-                                         np.arange(parameters_weights[0].shape[1]), 
-                                         parameters_weights[0])
+        new_kernel = RectBivariateSpline(
+            np.arange(parameters_weights[0].shape[0]), np.arange(parameters_weights[0].shape[1]), parameters_weights[0]
+        )
         parameters_weights[0] = new_kernel(xx, np.arange(parameters_weights[0].shape[1]))
 
-    parameters_weights[0] = parameters_weights[0][:model.pos_embeddings.num_embeddings - 1]
-    parameters_weights[1] = parameters_weights[1][:model.embeddings.num_embeddings - n_special_tokens]
+    parameters_weights[0] = parameters_weights[0][: model.pos_embeddings.num_embeddings - 1]
+    parameters_weights[1] = parameters_weights[1][: model.embeddings.num_embeddings - n_special_tokens]
 
     model.pos_embeddings.weight.data[1:] = torch.from_numpy(parameters_weights[0])
     model.embeddings.weight.data[n_special_tokens:] = torch.from_numpy(parameters_weights[1])
-
 
     parameters_weights = parameters_weights[2:]
 
     for name, weights in zip(parameters_names, parameters_weights):
         name = name[6:]  # skip "model/"
-        assert name[-2:] == ':0'
+        assert name[-2:] == ":0"
         name = name[:-2]
-        name = name.split('/')
+        name = name.split("/")
 
         pointer = model
         for m_name in name:
-            if re.fullmatch(r'[A-Za-z]+\d+', m_name):
-                l = re.split(r'(\d+)', m_name)
+            if re.fullmatch(r"[A-Za-z]+\d+", m_name):
+                l = re.split(r"(\d+)", m_name)
             else:
                 l = [m_name]
 
@@ -168,7 +262,16 @@ def load_openai_weights(model, directory, n_special_tokens=0):
                 num = int(l[1])
                 pointer = pointer[num]
 
-        if len(weights.shape) == 3: # conv1d to linear
+        if len(weights.shape) == 3:  # conv1d to linear
             weights = weights[0].transpose((1, 0))
 
         pointer.data[...] = torch.from_numpy(weights)
+
+
+# %%
+
+import collections
+
+a = collections.Counter(set("123123"))
+a["1"] = 0
+a

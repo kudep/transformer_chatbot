@@ -21,7 +21,7 @@ import random
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from .utils import pad_sequence
-from .optim import Adam, NoamOpt
+from .optim import Adam, TriangleOpt
 from .loss import LabelSmoothingLoss
 import numpy as np
 import time
@@ -29,26 +29,55 @@ import time
 
 from tensorboardX import SummaryWriter
 import logging
+
 logger = logging.getLogger(__name__)
 tqdm.monitor_interval = 0
 
 
 class Trainer:
-    def __init__(self, model, train_dataset, test_dataset=None, batch_size=8,
-                 batch_split=1, lm_weight=0.5, risk_weight=0, lr=6.25e-5, lr_warmup=2000,
-                 n_jobs=0, clip_grad=None, label_smoothing=0, device=torch.device('cuda'),
-                 ignore_idxs=[], tb_writer=None):
+    def __init__(
+        self,
+        model,
+        train_dataset,
+        test_dataset=None,
+        batch_size=8,
+        batch_split=1,
+        lm_weight=0.5,
+        risk_weight=0,
+        lr=6.25e-5,
+        lr_warmup=2000,
+        lr_freq=0,
+        n_jobs=0,
+        clip_grad=None,
+        label_smoothing=0,
+        device=torch.device("cuda"),
+        ignore_idxs=[],
+        tb_writer=None,
+    ):
         self.model = model.to(device)
         self.lm_criterion = nn.CrossEntropyLoss(ignore_index=self.model.padding_idx).to(device)
-        self.criterion = LabelSmoothingLoss(n_labels=self.model.n_embeddings, smoothing=label_smoothing, ignore_index=self.model.padding_idx).to(device)
+        self.criterion = LabelSmoothingLoss(
+            n_labels=self.model.n_embeddings, smoothing=label_smoothing, ignore_index=self.model.padding_idx
+        ).to(device)
         base_optimizer = Adam(self.model.parameters(), lr=lr, weight_decay=0.01)
-        self.optimizer = NoamOpt(self.model.embeddings_size, 1, lr_warmup, base_optimizer)
+        step_period = int(int(len(train_dataset) / batch_size) / lr_freq) if lr_freq else float("inf")
+        self.optimizer = TriangleOpt(self.model.embeddings_size, 1, lr_warmup, base_optimizer, step_period)
 
-        self.train_dataloader = DataLoader(train_dataset, batch_size=batch_size//batch_split, shuffle=True,
-                                           num_workers=n_jobs, collate_fn=self.collate_func)
+        self.train_dataloader = DataLoader(
+            train_dataset,
+            batch_size=batch_size // batch_split,
+            shuffle=True,
+            num_workers=n_jobs,
+            collate_fn=self.collate_func,
+        )
         if test_dataset is not None:
-            self.test_dataloader = DataLoader(test_dataset, batch_size=batch_size//batch_split, shuffle=False,
-                                              num_workers=n_jobs, collate_fn=self.collate_func)
+            self.test_dataloader = DataLoader(
+                test_dataset,
+                batch_size=batch_size // batch_split,
+                shuffle=False,
+                num_workers=n_jobs,
+                collate_fn=self.collate_func,
+            )
 
         self.batch_split = batch_split
         self.lm_weight = lm_weight
@@ -56,20 +85,17 @@ class Trainer:
         self.clip_grad = clip_grad
         self.device = device
         self.ignore_idxs = ignore_idxs
-        self.tb_writer = tb_writer if tb_writer is not None else SummaryWriter('tensorboards')
+        self.tb_writer = tb_writer if tb_writer is not None else SummaryWriter("tensorboards")
         self.optimizer._step = 0
         self.epoch = 0
 
     def state_dict(self):
-        return {'model': self.model.state_dict(),
-                'optimizer': self.optimizer.state_dict(),
-                'epoch': self.epoch,
-                }
+        return {"model": self.model.state_dict(), "optimizer": self.optimizer.state_dict(), "epoch": self.epoch}
 
     def load_state_dict(self, state_dict):
-        self.model.load_state_dict(state_dict['model'], strict=False)
-        self.optimizer.load_state_dict(state_dict['optimizer'])
-        self.epoch = state_dict.get('epoch', 0)
+        self.model.load_state_dict(state_dict["model"], strict=False)
+        self.optimizer.load_state_dict(state_dict["optimizer"])
+        self.epoch = state_dict.get("epoch", 0)
 
     def collate_func(self, data):
         persona_info, h, y = zip(*data)
@@ -94,7 +120,7 @@ class Trainer:
     def _eval_train(self, epoch, risk_func=None):
         self.model.train()
 
-        tqdm_data = tqdm(self.train_dataloader, desc='Train (epoch #{})'.format(epoch))
+        tqdm_data = tqdm(self.train_dataloader, desc="Train (epoch #{})".format(epoch))
         loss = 0
         lm_loss = 0
         risk_loss = 0
@@ -114,7 +140,7 @@ class Trainer:
                     ignore_mask = torch.stack([context == idx for idx in self.ignore_idxs], dim=-1).any(dim=-1)
                     context.masked_fill_(ignore_mask, self.model.padding_idx)
                     prevs, nexts = context_outputs[:, :-1, :].contiguous(), context[:, 1:].contiguous()
-                    batch_lm_loss += (self.lm_criterion(prevs.view(-1, prevs.shape[-1]), nexts.view(-1)) / len(contexts))
+                    batch_lm_loss += self.lm_criterion(prevs.view(-1, prevs.shape[-1]), nexts.view(-1)) / len(contexts)
 
             # s2s loss
             prevs, nexts = targets[:, :-1].contiguous(), targets[:, 1:].contiguous()
@@ -129,10 +155,10 @@ class Trainer:
                 beams, beam_lens = self.model.beam_search(enc_contexts, return_beams=True)
 
                 target_lens = targets.ne(self.model.padding_idx).sum(dim=-1)
-                targets = [target[1:length-1].tolist() for target, length in zip(targets, target_lens)]
+                targets = [target[1 : length - 1].tolist() for target, length in zip(targets, target_lens)]
                 batch_risks = []
                 for b in range(beams.shape[1]):
-                    predictions = [b[1:l-1].tolist() for b, l in zip(beams[:, b, :], beam_lens[:, b])]
+                    predictions = [b[1 : l - 1].tolist() for b, l in zip(beams[:, b, :], beam_lens[:, b])]
                     risks = torch.tensor(risk_func(predictions, targets), dtype=torch.float, device=self.device)
                     batch_risks.append(risks)
                 batch_risks = torch.stack(batch_risks, dim=-1)
@@ -150,13 +176,15 @@ class Trainer:
                 batch_risk_loss = torch.mean((batch_risks * batch_probas).sum(dim=-1))
 
             # optimization
-            full_loss = (batch_lm_loss * self.lm_weight + self.risk_weight * batch_risk_loss + batch_loss) / self.batch_split
+            full_loss = (
+                batch_lm_loss * self.lm_weight + self.risk_weight * batch_risk_loss + batch_loss
+            ) / self.batch_split
             full_loss.backward()
 
             if (i + 1) % self.batch_split == 0:
                 if self.clip_grad is not None:
                     for group in self.optimizer.param_groups:
-                        nn.utils.clip_grad_norm_(group['params'], self.clip_grad)
+                        nn.utils.clip_grad_norm_(group["params"], self.clip_grad)
                 self.optimizer.step()
                 self._tb_writer_after_step()
                 self.optimizer.zero_grad()
@@ -165,55 +193,41 @@ class Trainer:
             loss = (i * loss + batch_loss.item()) / (i + 1)
             risk_loss = (i * risk_loss + batch_risk_loss.item()) / (i + 1)
 
-            tqdm_data.set_postfix({'lm_loss': lm_loss, 'loss': loss, 'risk_loss': risk_loss})
+            tqdm_data.set_postfix({"lm_loss": lm_loss, "loss": loss, "risk_loss": risk_loss})
             if (i + 1) % self.batch_split == 0:
-                self.tb_writer.add_scalar('train/lm_loss', lm_loss, self.optimizer._step)
-                self.tb_writer.add_scalar('train/risk_loss', risk_loss, self.optimizer._step)
-                self.tb_writer.add_scalar('train/loss', loss, self.optimizer._step)
+                self.tb_writer.add_scalar("train/lm_loss", lm_loss, self.optimizer._step)
+                self.tb_writer.add_scalar("train/risk_loss", risk_loss, self.optimizer._step)
+                self.tb_writer.add_scalar("train/loss", loss, self.optimizer._step)
 
     def _mean4hist(self, component):
         return component.weight.grad.clone().cpu().data.numpy()
 
     def _tb_writer_after_step(self):
-        self.tb_writer.add_scalar('optimizer/rate',
-                                  self.optimizer.rate(),
-                                  self.optimizer._step)
+        self.tb_writer.add_scalar("optimizer/rate", self.optimizer.rate(), self.optimizer._step)
         if self.optimizer._step % 50 == 1:  # it's take 16 seconds.
             tensors = []
             embeddings = self._mean4hist(self.model.transformer_module.embeddings)
             tensors.append(embeddings)
-            self.tb_writer.add_histogram('optimizer/grads/embeddings',
-                                         embeddings,
-                                         self.optimizer._step)
+            self.tb_writer.add_histogram("optimizer/grads/embeddings", embeddings, self.optimizer._step)
             if self.model.transformer_module.bert_mode:
                 type_embeddings = self._mean4hist(self.model.transformer_module.type_embeddings)
                 tensors.append(type_embeddings)
-                self.tb_writer.add_histogram('optimizer/grads/type_embeddings',
-                                             type_embeddings,
-                                             self.optimizer._step)
+                self.tb_writer.add_histogram("optimizer/grads/type_embeddings", type_embeddings, self.optimizer._step)
             pos_embeddings = self._mean4hist(self.model.transformer_module.pos_embeddings)
             tensors.append(pos_embeddings)
-            self.tb_writer.add_histogram('optimizer/grads/pos_embeddings',
-                                         pos_embeddings,
-                                         self.optimizer._step)
+            self.tb_writer.add_histogram("optimizer/grads/pos_embeddings", pos_embeddings, self.optimizer._step)
             pre_softmax = self._mean4hist(self.model.pre_softmax)
             tensors.append(pre_softmax)
-            self.tb_writer.add_histogram('optimizer/grads/pre_softmax',
-                                         pre_softmax,
-                                         self.optimizer._step)
+            self.tb_writer.add_histogram("optimizer/grads/pre_softmax", pre_softmax, self.optimizer._step)
             for i, layer in enumerate(self.model.transformer_module.layers, 1):
                 layer_grads = [tensor.grad.clone().cpu().data.numpy() for tensor in layer.parameters()]
                 layer_grads = [tensor.reshape(-1) for tensor in layer_grads]
                 layer_grads = np.concatenate(layer_grads)
                 tensors.append(layer_grads)
-                self.tb_writer.add_histogram(f'optimizer/grads/layer_{i:02d}',
-                                             layer_grads,
-                                             self.optimizer._step)
+                self.tb_writer.add_histogram(f"optimizer/grads/layer_{i:02d}", layer_grads, self.optimizer._step)
             tensors = [tensor.reshape(-1) for tensor in tensors]
             tensors = np.concatenate(tensors)
-            self.tb_writer.add_histogram(f'optimizer/grads/global',
-                                         tensors,
-                                         self.optimizer._step)
+            self.tb_writer.add_histogram(f"optimizer/grads/global", tensors, self.optimizer._step)
 
     def _get_timeout(self, start=False, paticient=10, timeout=2):
         if start:
@@ -223,7 +237,7 @@ class Trainer:
             self.last = time.time()
         current = time.time()
         if timeout > (current - self.last):
-            self.paticient = min(self.paticient+1, self.base_paticient)
+            self.paticient = min(self.paticient + 1, self.base_paticient)
         if timeout <= (current - self.last):
             self.paticient -= 1
         self.last = time.time()
@@ -232,7 +246,7 @@ class Trainer:
     def _eval_test(self, metric_funcs={}):
         self.model.eval()
 
-        tqdm_data = tqdm(self.test_dataloader, desc='Test')
+        tqdm_data = tqdm(self.test_dataloader, desc="Test")
         loss = 0
         lm_loss = 0
         metrics = {name: 0 for name in metric_funcs.keys()}
@@ -257,7 +271,7 @@ class Trainer:
                     ignore_mask = torch.stack([context == idx for idx in self.ignore_idxs], dim=-1).any(dim=-1)
                     context.masked_fill_(ignore_mask, self.model.padding_idx)
                     prevs, nexts = context_outputs[:, :-1, :].contiguous(), context[:, 1:].contiguous()
-                    batch_lm_loss += (self.lm_criterion(prevs.view(-1, prevs.shape[-1]), nexts.view(-1)) / len(contexts))
+                    batch_lm_loss += self.lm_criterion(prevs.view(-1, prevs.shape[-1]), nexts.view(-1)) / len(contexts)
 
             # s2s loss
             prevs, nexts = targets[:, :-1].contiguous(), targets[:, 1:].contiguous()
@@ -267,24 +281,25 @@ class Trainer:
 
             predictions = self.model.beam_search(enc_contexts)
             target_lens = targets.ne(self.model.padding_idx).sum(dim=-1)
-            targets = [t[1:l-1].tolist() for t, l in zip(targets, target_lens)]
+            targets = [t[1 : l - 1].tolist() for t, l in zip(targets, target_lens)]
 
             lm_loss = (i * lm_loss + batch_lm_loss.item()) / (i + 1)
             loss = (i * loss + batch_loss.item()) / (i + 1)
             for name, func in metric_funcs.items():
                 score = func(predictions, targets)
-                metrics[name] = (metrics[name] * i + score) / (i + 1)
+                if score is not None:
+                    metrics[name] = (metrics[name] * i + score) / (i + 1)
 
-            tqdm_data.set_postfix(dict({'lm_loss': lm_loss, 'loss': loss}, **metrics))
+            tqdm_data.set_postfix(dict({"lm_loss": lm_loss, "loss": loss}, **metrics))
 
-        self.tb_writer.add_scalar('test/lm_loss', lm_loss, self.epoch)
-        self.tb_writer.add_scalar('test/loss', loss, self.epoch)
+        self.tb_writer.add_scalar("test/lm_loss", lm_loss, self.epoch)
+        self.tb_writer.add_scalar("test/loss", loss, self.epoch)
         for k, v in metrics.items():
-            self.tb_writer.add_scalar(f'test/{k}', v, self.epoch)
+            self.tb_writer.add_scalar(f"test/{k}", v, self.epoch)
         logger.info(f"Test: {dict({'lm_loss': lm_loss, 'loss': loss}, **metrics)}")
 
     def test(self, metric_funcs={}):
-        if hasattr(self, 'test_dataloader'):
+        if hasattr(self, "test_dataloader"):
             self._eval_test(metric_funcs)
 
     def train(self, epochs, after_epoch_funcs=[], risk_func=None):

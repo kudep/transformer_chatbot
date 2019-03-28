@@ -2,6 +2,7 @@ signature=$1
 domain=${2:-sber_srt}
 lambda_lm=${3:-10} 
 lambda_risk=${4:-0} 
+lr_freq=${5:-inf} 
 # bert_dir='supply/rubert_cased_L-12_H-768_A-12'
 bert_dir='supply/rubert_cased_L-12_H-768_A-12_v2'
 case "$signature" in
@@ -18,6 +19,7 @@ case "$signature" in
   --valid_from "datasets/${domain}/*.valid.txt" \
   --batch_split 256 \
   --lm_weight ${lambda_lm} \
+  --lr_freq ${lr_freq} \
   --risk_weight ${lambda_risk} \
  ;;
 
@@ -33,6 +35,7 @@ case "$signature" in
   --valid_from "datasets/${domain}/*.valid.txt" \
   --batch_split 256 \
   --lm_weight ${lambda_lm} \
+  --lr_freq ${lr_freq} \
   --risk_weight ${lambda_risk} \
  ;;
 
@@ -48,6 +51,7 @@ case "$signature" in
   --valid_from "datasets/${domain}/*.valid.txt" \
   --batch_split 256 \
   --lm_weight ${lambda_lm} \
+  --lr_freq ${lr_freq} \
   --risk_weight ${lambda_risk} \
  ;;
 
@@ -63,6 +67,7 @@ case "$signature" in
   --valid_from "datasets/${domain}/*.valid.txt" \
   --batch_split 256 \
   --lm_weight ${lambda_lm} \
+  --lr_freq ${lr_freq} \
   --risk_weight ${lambda_risk} \
  ;;
 
@@ -78,6 +83,7 @@ case "$signature" in
   --valid_from "datasets/${domain}/*.valid.txt" \
   --batch_split 256 \
   --lm_weight ${lambda_lm} \
+  --lr_freq ${lr_freq} \
   --risk_weight ${lambda_risk} \
  ;;
 
@@ -93,6 +99,7 @@ case "$signature" in
   --valid_from "datasets/${domain}/*.valid.txt" \
   --batch_split 128 \
   --lm_weight ${lambda_lm} \
+  --lr_freq ${lr_freq} \
   --risk_weight ${lambda_risk} \
  ;;
 
@@ -108,6 +115,7 @@ case "$signature" in
   --valid_from "datasets/${domain}/*.valid.txt" \
   --batch_split 256 \
   --lm_weight ${lambda_lm} \
+  --lr_freq ${lr_freq} \
   --risk_weight ${lambda_risk} \
  ;;
 
@@ -123,6 +131,7 @@ case "$signature" in
   --valid_from "datasets/${domain}/*.valid.txt" \
   --batch_split 256 \
   --lm_weight ${lambda_lm} \
+  --lr_freq ${lr_freq} \
   --risk_weight ${lambda_risk} \
  ;;
 
@@ -138,6 +147,7 @@ case "$signature" in
   --valid_from "datasets/${domain}/*.valid.txt" \
   --batch_split 256 \
   --lm_weight ${lambda_lm} \
+  --lr_freq ${lr_freq} \
   --risk_weight ${lambda_risk} \
  ;;
 
@@ -153,6 +163,7 @@ case "$signature" in
   --valid_from "datasets/${domain}/*.valid.txt" \
   --batch_split 128 \
   --lm_weight ${lambda_lm} \
+  --lr_freq ${lr_freq} \
   --risk_weight ${lambda_risk} \
  ;;
 
@@ -168,6 +179,7 @@ case "$signature" in
   --valid_from "datasets/${domain}/*.valid.txt" \
   --batch_split 256 \
   --lm_weight ${lambda_lm} \
+  --lr_freq ${lr_freq} \
   --risk_weight ${lambda_risk} \
  ;;
 
@@ -183,6 +195,7 @@ case "$signature" in
   --valid_from "datasets/${domain}/*.valid.txt" \
   --batch_split 256 \
   --lm_weight ${lambda_lm} \
+  --lr_freq ${lr_freq} \
   --risk_weight ${lambda_risk} \
  ;;
 

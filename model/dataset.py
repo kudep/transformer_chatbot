@@ -32,7 +32,7 @@ class FacebookDataset:
     def parse_data(path):
         with open(path, 'r', encoding='utf-8') as file:
             data = []
-            for line in file.readlines():
+            for i, line in enumerate(file.readlines()):
                 line = line.strip()
 
                 if len(line) == 0:
@@ -45,6 +45,8 @@ class FacebookDataset:
                     dialog_idx = int(line[:space_idx])
 
                 if int(dialog_idx) == 1:
+                    if data and not data[-1]['dialog']:
+                        logger.warning(f'pop from dataset a line number = {i-1} a file path {path}')
                     data.append({'persona_info': [], 'dialog': []})
 
                 dialog_line = line[space_idx + 1:].split('\t')
@@ -57,7 +59,7 @@ class FacebookDataset:
                 elif len(dialog_line) > 1:
                     data[-1]['dialog'].append(dialog_line[0])
                     data[-1]['dialog'].append(dialog_line[1])
-
+            data = [d for d in data if d['dialog']]
             return data
 
     @staticmethod
@@ -142,24 +144,9 @@ class FacebookDataset:
             y = [self.vocab.bos_id] + dialog[dialog_end-1] + [self.vocab.eos_id]
         except:
             logger.warning(traceback.format_exc())
+            logger.warning(persona_info)
             logger.warning(dialog)
             y = [self.vocab.bos_id] + [self.vocab.eos_id]
         y = y[:self.max_lengths]
 
         return persona_info, h, y
-
-
-# # %%
-
-# import traceback
-
-# def run_user_code():
-#     try:
-#         assert False
-#     except:
-#         print("Exception in user code:")
-#         print('-'*60)
-#         print(traceback.format_exc())
-#         print('-'*60)
-
-# run_user_code()
