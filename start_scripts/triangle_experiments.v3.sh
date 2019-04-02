@@ -36,6 +36,54 @@ case "$signature" in
   --risk_weight 10 \
  ;;
 
+ "bert_tw1_seg1_v40k_fin_16" )
+ python train.py \
+  --lr_warmup 16000 \
+  --signature bert_tw1_seg1_v40k_fin_16_v3 \
+  --segment_embedding 1 \
+  --tie_weights 1 \
+  --path2bert_vocab ${bert_dir}/std_lm_vocab.40k.txt \
+  --tf_bert_model_load_from ${bert_dir}/model.ckpt-710142 \
+  --train_from "datasets/toloka_alice_samples.v2/*.train.txt" \
+  --valid_from "datasets/toloka_alice_samples.v2/*.valid.txt" \
+  --batch_split 256 \
+  --lm_weight 0.1 \
+  --lr_freq 16 \
+  --risk_weight 10 \
+ ;;
+
+ "bert_tw1_seg1_v40k_fin_32" )
+ python train.py \
+  --lr_warmup 16000 \
+  --signature bert_tw1_seg1_v40k_fin_32_v3 \
+  --segment_embedding 1 \
+  --tie_weights 1 \
+  --path2bert_vocab ${bert_dir}/std_lm_vocab.40k.txt \
+  --tf_bert_model_load_from ${bert_dir}/model.ckpt-710142 \
+  --train_from "datasets/toloka_alice_samples.v2/*.train.txt" \
+  --valid_from "datasets/toloka_alice_samples.v2/*.valid.txt" \
+  --batch_split 256 \
+  --lm_weight 0.1 \
+  --lr_freq 32 \
+  --risk_weight 10 \
+ ;;
+
+ "bert_tw1_seg1_v40k_fin_64" )
+ python train.py \
+  --lr_warmup 16000 \
+  --signature bert_tw1_seg1_v40k_fin_64_v3 \
+  --segment_embedding 1 \
+  --tie_weights 1 \
+  --path2bert_vocab ${bert_dir}/std_lm_vocab.40k.txt \
+  --tf_bert_model_load_from ${bert_dir}/model.ckpt-710142 \
+  --train_from "datasets/toloka_alice_samples.v2/*.train.txt" \
+  --valid_from "datasets/toloka_alice_samples.v2/*.valid.txt" \
+  --batch_split 256 \
+  --lm_weight 0.1 \
+  --lr_freq 64 \
+  --risk_weight 10 \
+ ;;
+
  "bert_tw1_seg1_v40k_fin_4" )
  python train.py \
   --lr_warmup 16000 \
