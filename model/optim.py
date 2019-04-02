@@ -153,4 +153,5 @@ class TriangleOpt(NoamOpt):
         if step is None:
             step = self._step
         scale_lr = self.factor * (self.embeddings_size ** (-0.5) * min(step ** (-0.5), step * self.warmup ** (-1.5)))
+        scale_lr /= 2.0
         return scale_lr + scale_lr * math.sin(2 * math.pi * self._step / self.step_period)
