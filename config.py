@@ -37,6 +37,7 @@ parser.add_argument("--openai_bpe_vocab", default=False, type=str2bool)
 parser.add_argument("--bare_model", default=False, type=str2bool)
 parser.add_argument("--segment_embedding", default=False, type=str2bool)
 parser.add_argument("-l", "--load_last", default=True, type=str2bool)
+parser.add_argument("--n_layers", default=12, type=int)
 parser.add_argument("-b", "--bert_mode", default=True, type=str2bool)
 parser.add_argument("-w", "--lr_warmup", default=16000, type=int)
 parser.add_argument("-f", "--lr_freq", default=0, type=float)
@@ -46,6 +47,11 @@ parser.add_argument("-d", "--device", default="cuda")
 parser.add_argument("--train_from", default="./datasets/toloka_dials/*.train.txt")
 parser.add_argument("--valid_from", default="./datasets/toloka_dials/*.valid.txt")
 parser.add_argument("--batch_split", default=256, type=int)
+parser.add_argument("--input_token_mode", default='default', type=str)
+parser.add_argument("--n_epochs", default=1000, type=int)
+parser.add_argument("--max_seq_len", default=128, type=int)
+# parser.add_argument("--reconf_train_mode", default='default', type=str)
+parser.add_argument("--spec_token_reinit", default='', type=str,help='B - init BOSs of SEP, E - init EOSs of CLS') 
 args = parser.parse_args()
 
 
@@ -73,7 +79,7 @@ def get_model_config():
             "bpe_codes_path": "./parameters/bpe.code",
             "openai_bpe_vocab": args.openai_bpe_vocab,
             "checkpoint_path": "./checkpoints/last_checkpoint",
-            "n_layers": default_config.n_layers,
+            "n_layers": args.n_layers,
             "n_pos_embeddings": 512,
             "embeddings_size": default_config.embeddings_size,
             "n_heads": default_config.n_heads,
@@ -81,7 +87,7 @@ def get_model_config():
             "embed_dropout": default_config.embed_dropout,
             "attn_dropout": default_config.attn_dropout,
             "ff_dropout": default_config.ff_dropout,
-            "max_seq_len": 128 if args.bert_mode else 256,
+            "max_seq_len": args.max_seq_len,
             "sep_id_enable": args.bert_mode,
             "beam_size": 3,
             "diversity_coef": 0,
@@ -106,7 +112,7 @@ def get_trainer_config():
     test_hash = hashlib.md5(str(test_files).encode()).hexdigest()[:4]
     config = AttrDict(
         {
-            "n_epochs": 1000,
+            "n_epochs": args.n_epochs,
             "batch_size": 256,
             "batch_split": args.batch_split,
             "lr": 6.25e-5,
@@ -128,11 +134,13 @@ def get_trainer_config():
             "openai_parameters_dir": "./parameters",
             "last_checkpoint_path": "./checkpoints/last_checkpoint",
             "interrupt_checkpoint_path": "./checkpoints/interrupt_checkpoint",
+            "spec_token_reinit": args.spec_token_reinit,
             "train_datasets": train_files,
             "train_datasets_cache": f"./datasets/train-{train_hash}.cache",
             "test_datasets": test_files,
             "test_datasets_cache": f"./datasets/test-{test_hash}.cache",
             "tb_writer": writer,
+            "input_token_mode": args.input_token_mode,
         }
     )
     return config

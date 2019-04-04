@@ -24,13 +24,14 @@ import tqdm
 import pickle
 import pathlib
 import logging
+
 logger = logging.getLogger(__name__)
 
 
 class FacebookDataset:
     @staticmethod
     def parse_data(path):
-        with open(path, 'r', encoding='utf-8') as file:
+        with open(path, "r", encoding="utf-8") as file:
             data = []
             for i, line in enumerate(file.readlines()):
                 line = line.strip()
@@ -38,28 +39,28 @@ class FacebookDataset:
                 if len(line) == 0:
                     continue
 
-                space_idx = line.find(' ')
+                space_idx = line.find(" ")
                 if space_idx == -1:
                     dialog_idx = int(line)
                 else:
                     dialog_idx = int(line[:space_idx])
 
                 if int(dialog_idx) == 1:
-                    if data and not data[-1]['dialog']:
-                        logger.warning(f'pop from dataset a line number = {i-1} a file path {path}')
-                    data.append({'persona_info': [], 'dialog': []})
+                    if data and not data[-1]["dialog"]:
+                        logger.warning(f"pop from dataset a line number = {i-1} a file path {path}")
+                    data.append({"persona_info": [], "dialog": []})
 
-                dialog_line = line[space_idx + 1:].split('\t')
+                dialog_line = line[space_idx + 1 :].split("\t")
                 dialog_line = [l.strip() for l in dialog_line]
 
-                if dialog_line[0].startswith('your persona:'):
-                    persona_info = dialog_line[0].replace('your persona: ', '')
-                    data[-1]['persona_info'].append(persona_info)
+                if dialog_line[0].startswith("your persona:"):
+                    persona_info = dialog_line[0].replace("your persona: ", "")
+                    data[-1]["persona_info"].append(persona_info)
 
                 elif len(dialog_line) > 1:
-                    data[-1]['dialog'].append(dialog_line[0])
-                    data[-1]['dialog'].append(dialog_line[1])
-            data = [d for d in data if d['dialog']]
+                    data[-1]["dialog"].append(dialog_line[0])
+                    data[-1]["dialog"].append(dialog_line[1])
+            data = [d for d in data if d["dialog"]]
             return data
 
     @staticmethod
@@ -67,8 +68,9 @@ class FacebookDataset:
         # Using initializer and  multi_preprocessing functions from this module
         def init_worker(function):
             function.ext_args = ext_args
+
         fin_data = []
-        with Pool(cpu_n, initializer=init_worker,  initargs=(worker,)) as p:
+        with Pool(cpu_n, initializer=init_worker, initargs=(worker,)) as p:
             for process_ret in tqdm.tqdm(p.imap_unordered(worker, files), total=len(files)):
                 if process_ret:
                     fin_data.append(process_ret)
@@ -76,14 +78,24 @@ class FacebookDataset:
 
     @staticmethod
     def make_dataset(data):
-        persona_info = [FacebookDataset.make_dataset.ext_args.string2ids(s) for s in data['persona_info']]
-        dialog = [FacebookDataset.make_dataset.ext_args.string2ids(s) for s in data['dialog']]
+        persona_info = [FacebookDataset.make_dataset.ext_args.string2ids(s) for s in data["persona_info"]]
+        dialog = [FacebookDataset.make_dataset.ext_args.string2ids(s) for s in data["dialog"]]
 
         if len(dialog) % 2 == 1:
             dialog = dialog[:-1]
         return (persona_info, dialog)
 
-    def __init__(self, paths, vocab, max_lengths=2048, min_infos=2, sep_id_enable=False, cpu_n=4, cache_file=''):
+    def __init__(
+        self,
+        paths,
+        vocab,
+        max_lengths=2048,
+        min_infos=2,
+        sep_id_enable=False,
+        cpu_n=4,
+        cache_file="",
+        input_token_mode="default",
+    ):
         assert min_infos > 0
 
         if isinstance(paths, str):
@@ -93,60 +105,302 @@ class FacebookDataset:
         self.max_lengths = max_lengths
         self.min_infos = min_infos
         self.sep_id_enable = sep_id_enable
+        self.input_token_mode = input_token_mode
 
         if pathlib.Path(cache_file).is_file():
-            with open(cache_file, 'rb') as f:
+            with open(cache_file, "rb") as f:
                 self.data = pickle.load(f)
         else:
             parsed_data = sum(FacebookDataset.run_pool(paths, FacebookDataset.parse_data, cpu_n), [])
 
-            self.data = FacebookDataset.run_pool(parsed_data,
-                                                 FacebookDataset.make_dataset,
-                                                 cpu_n, ext_args=vocab)
-            with open(cache_file, 'wb') as f:
+            self.data = FacebookDataset.run_pool(parsed_data, FacebookDataset.make_dataset, cpu_n, ext_args=vocab)
+            with open(cache_file, "wb") as f:
                 pickle.dump(self.data, f)
 
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, idx):
-        persona_info, dialog = self.data[idx]
-        if len(persona_info):
-            n_info_samples = max(self.min_infos, random.randint(1, len(persona_info)))
-            n_info_samples = min(n_info_samples, len(persona_info))
-            persona_info = random.sample(persona_info, n_info_samples)
-            random.shuffle(persona_info)
-            persona_info = sum(persona_info, [])
-            persona_info = [self.vocab.info_bos_id] + persona_info[:self.max_lengths-2] + [self.vocab.info_eos_id]
+        #-------------------------------------------------------------------default----------------------------------------
+        if self.input_token_mode == "default":
+            persona_info, dialog = self.data[idx]
+            if len(persona_info):
+                n_info_samples = max(self.min_infos, random.randint(1, len(persona_info)))
+                n_info_samples = min(n_info_samples, len(persona_info))
+                persona_info = random.sample(persona_info, n_info_samples)
+                random.shuffle(persona_info)
+                persona_info = sum(persona_info, [])
+                persona_info = (
+                    [self.vocab.info_bos_id] + persona_info[: self.max_lengths - 2] + [self.vocab.info_eos_id]
+                )
+            dialog_begin = 0
+            try:
+                dialog_end = random.randrange(2, len(dialog) + 1, 2)
+            except:
+                logger.warning(traceback.format_exc())
+                logger.warning(dialog)
+                dialog_end = 0
 
-        dialog_begin = 0
-        try:
-            dialog_end = random.randrange(2, len(dialog)+1, 2)
-        except:
-            logger.warning(traceback.format_exc())
-            logger.warning(dialog)
-            dialog_end = 0
-
-        h = []
-        if self.sep_id_enable and persona_info:
-            h.append(self.vocab.sep_id)
-        for i, ids in enumerate(dialog[dialog_begin:dialog_end-1], 1):
-            if i % 2 == 1:
-                ids = [self.vocab.talker1_bos_id] + ids + [self.vocab.talker1_eos_id]
-            else:
-                ids = [self.vocab.talker2_bos_id] + ids + [self.vocab.talker2_eos_id]
-            if self.sep_id_enable and len(h) > 1:
+            h = []
+            if self.sep_id_enable and persona_info:
                 h.append(self.vocab.sep_id)
-            h.extend(ids)
-        h = h[-self.max_lengths:]
+            for i, ids in enumerate(dialog[dialog_begin : dialog_end - 1], 1):
+                if i % 2 == 1:
+                    ids = [self.vocab.talker1_bos_id] + ids + [self.vocab.talker1_eos_id]
+                else:
+                    ids = [self.vocab.talker2_bos_id] + ids + [self.vocab.talker2_eos_id]
+                if self.sep_id_enable and len(h) > 1:
+                    h.append(self.vocab.sep_id)
+                h.extend(ids)
+            h = h[-self.max_lengths :]
 
-        try:
-            y = [self.vocab.bos_id] + dialog[dialog_end-1] + [self.vocab.eos_id]
-        except:
-            logger.warning(traceback.format_exc())
-            logger.warning(persona_info)
-            logger.warning(dialog)
-            y = [self.vocab.bos_id] + [self.vocab.eos_id]
-        y = y[:self.max_lengths]
+            try:
+                y = [self.vocab.bos_id] + dialog[dialog_end - 1] + [self.vocab.eos_id]
+            except:
+                logger.warning(traceback.format_exc())
+                logger.warning(persona_info)
+                logger.warning(dialog)
+                y = [self.vocab.bos_id] + [self.vocab.eos_id]
+            y = y[: self.max_lengths]
+
+        #-------------------------------------------------------------------SpecT1_CS----------------------------------------
+        elif self.input_token_mode == "SpecT1_CS":
+            # persona:
+            #       [CLS,
+            #           INFO_BOS,
+            #               p1_w1, p1_w2, p1_w3, SEP,
+            #               p2_w1, p2_w2, p2_w3, SEP,
+            #               p3_w1, p3_w3, p3_w3, SEP,
+            #               p4_w1, p4_w4, p4_w3, SEP,
+            #           INFO_EOS,
+            #       ]
+            persona_info, dialog = self.data[idx]
+            if len(persona_info):
+                n_info_samples = max(self.min_infos, random.randint(1, len(persona_info)))
+                n_info_samples = min(n_info_samples, len(persona_info))
+                persona_info = random.sample(persona_info, n_info_samples)
+                random.shuffle(persona_info)
+                # SpecT1_CS
+                persona_info = [p_info[: self.max_lengths - 4] for p_info in persona_info]
+                persona_info = [p_info + [self.vocab.sep_id] for p_info in persona_info]
+                while len(sum(persona_info, [])) > (self.max_lengths - 3):
+                    persona_info.pop()
+
+                persona_info = sum(persona_info, [])
+                persona_info = [self.vocab.cls_id] + [self.vocab.info_bos_id] + persona_info + [self.vocab.info_eos_id]
+
+            assert len(persona_info) <= self.max_lengths, "Too large len of a persona"
+
+            # dialog:
+            #       [CLS,
+            #           TALKER1_BOS, t1_w1, t1_w2, t1_w3, SEP, TALKER1_EOS
+            #           TALKER2_BOS, t2_w1, t2_w2, t2_w3, SEP, TALKER2_EOS
+            #           TALKER1_BOS, t1_w1, t1_w2, t1_w3, SEP, TALKER1_EOS
+            #       ]
+            dialog_begin = 0
+            dialog_end = random.randrange(2, len(dialog) + 1, 2)
+            pre_h = []
+            for i, ids in enumerate(dialog[dialog_begin : dialog_end - 1], 1):
+                ids = ids[: self.max_lengths - 4]
+                ids.append(self.vocab.sep_id)
+                if i % 2 == 1:
+                    ids = [self.vocab.talker1_bos_id] + ids + [self.vocab.talker1_eos_id]
+                else:
+                    ids = [self.vocab.talker2_bos_id] + ids + [self.vocab.talker2_eos_id]
+                pre_h.append(ids)
+            l1 = len(pre_h)
+            while len(sum(pre_h, [])) > (self.max_lengths - 1):
+                pre_h.pop(0)
+            if l1 != len(pre_h):
+                print(f'len(sum(pre_h, []) = {len(sum(pre_h, []))}')
+                print(f'self.max_lengths = {self.max_lengths}')
+
+
+            h = [self.vocab.cls_id]
+            [h.extend(i) for i in pre_h]
+            assert len(h) <= self.max_lengths, "Too large len of a dialog"
+
+            # answer:
+            #       [CLS, BOS, t1_w1, t1_w2, t1_w3, SEP, EOS,]
+            y = (
+                [self.vocab.cls_id, self.vocab.bos_id]
+                + dialog[dialog_end - 1][: self.max_lengths - 4]
+                + [self.vocab.sep_id, self.vocab.eos_id]
+            )
+        #-------------------------------------------------------------------SpecT1_S----------------------------------------
+        elif self.input_token_mode == "SpecT1_S":
+            # persona:
+            #       [
+            #           INFO_BOS,
+            #               p1_w1, p1_w2, p1_w3, SEP,
+            #               p2_w1, p2_w2, p2_w3, SEP,
+            #               p3_w1, p3_w3, p3_w3, SEP,
+            #               p4_w1, p4_w4, p4_w3, SEP,
+            #           INFO_EOS,
+            #       ]
+            persona_info, dialog = self.data[idx]
+            if len(persona_info):
+                n_info_samples = max(self.min_infos, random.randint(1, len(persona_info)))
+                n_info_samples = min(n_info_samples, len(persona_info))
+                persona_info = random.sample(persona_info, n_info_samples)
+                random.shuffle(persona_info)
+                # SpecT1_S
+                persona_info = [p_info[: self.max_lengths - 3] for p_info in persona_info]
+                persona_info = [p_info + [self.vocab.sep_id] for p_info in persona_info]
+                while len(sum(persona_info, [])) > (self.max_lengths - 2):
+                    persona_info.pop()
+
+                persona_info = sum(persona_info, [])
+                persona_info = [self.vocab.info_bos_id] + persona_info + [self.vocab.info_eos_id]
+
+            assert len(persona_info) <= self.max_lengths, "Too large len of a persona"
+
+            # dialog:
+            #       [
+            #           TALKER1_BOS, t1_w1, t1_w2, t1_w3, SEP, TALKER1_EOS
+            #           TALKER2_BOS, t2_w1, t2_w2, t2_w3, SEP, TALKER2_EOS
+            #           TALKER1_BOS, t1_w1, t1_w2, t1_w3, SEP, TALKER1_EOS
+            #       ]
+            dialog_begin = 0
+            dialog_end = random.randrange(2, len(dialog) + 1, 2)
+            pre_h = []
+            for i, ids in enumerate(dialog[dialog_begin : dialog_end - 1], 1):
+                ids = ids[: self.max_lengths - 3]
+                ids.append(self.vocab.sep_id)
+                if i % 2 == 1:
+                    ids = [self.vocab.talker1_bos_id] + ids + [self.vocab.talker1_eos_id]
+                else:
+                    ids = [self.vocab.talker2_bos_id] + ids + [self.vocab.talker2_eos_id]
+                pre_h.append(ids)
+            while len(sum(pre_h, [])) > self.max_lengths:
+                pre_h.pop(0)
+
+
+            h = []
+            [h.extend(i) for i in pre_h]
+            assert len(h) <= self.max_lengths, "Too large len of a dialog"
+
+            # answer:
+            #       [BOS, t1_w1, t1_w2, t1_w3, SEP, EOS,]
+            y = (
+                [self.vocab.bos_id]
+                + dialog[dialog_end - 1][: self.max_lengths - 3]
+                + [self.vocab.sep_id, self.vocab.eos_id]
+            )
+        #-------------------------------------------------------------------SpecT1_deleteCS----------------------------------------
+        elif self.input_token_mode == "SpecT1_deleteCS":
+            # persona:
+            #       [
+            #           INFO_BOS,
+            #               p1_w1, p1_w2, p1_w3,
+            #               p2_w1, p2_w2, p2_w3,
+            #               p3_w1, p3_w3, p3_w3,
+            #               p4_w1, p4_w4, p4_w3,
+            #           INFO_EOS,
+            #       ]
+            persona_info, dialog = self.data[idx]
+            if len(persona_info):
+                n_info_samples = max(self.min_infos, random.randint(1, len(persona_info)))
+                n_info_samples = min(n_info_samples, len(persona_info))
+                persona_info = random.sample(persona_info, n_info_samples)
+                random.shuffle(persona_info)
+                # mode_sep
+                persona_info = [p_info[: self.max_lengths - 2] for p_info in persona_info]
+                while len(sum(persona_info, [])) > (self.max_lengths - 2):
+                    persona_info.pop()
+
+                persona_info = sum(persona_info, [])
+                persona_info = [self.vocab.info_bos_id] + persona_info + [self.vocab.info_eos_id]
+
+            assert len(persona_info) <= self.max_lengths, "Too large len of a persona"
+
+            # dialog:
+            #       [
+            #           TALKER1_BOS, t1_w1, t1_w2, t1_w3, TALKER1_EOS
+            #           TALKER2_BOS, t2_w1, t2_w2, t2_w3, TALKER2_EOS
+            #           TALKER1_BOS, t1_w1, t1_w2, t1_w3, TALKER1_EOS
+            #       ]
+            dialog_begin = 0
+            dialog_end = random.randrange(2, len(dialog) + 1, 2)
+            pre_h = []
+            for i, ids in enumerate(dialog[dialog_begin : dialog_end - 1], 1):
+                ids = ids[: self.max_lengths - 2]
+                if i % 2 == 1:
+                    ids = [self.vocab.talker1_bos_id] + ids + [self.vocab.talker1_eos_id]
+                else:
+                    ids = [self.vocab.talker2_bos_id] + ids + [self.vocab.talker2_eos_id]
+                pre_h.append(ids)
+            while len(sum(pre_h, [])) > self.max_lengths:
+                pre_h.pop(0)
+
+
+            h = []
+            [h.extend(i) for i in pre_h]
+            assert len(h) <= self.max_lengths, "Too large len of a dialog"
+
+            # answer:
+            #       [BOS, t1_w1, t1_w2, t1_w3, EOS,]
+            y = (
+                [self.vocab.bos_id]
+                + dialog[dialog_end - 1][: self.max_lengths - 3]
+                + [self.vocab.eos_id]
+            )
+        #-------------------------------------------------------------------SpecT1_deleteCSB----------------------------------------
+        elif self.input_token_mode == "SpecT1_deleteCSB":
+            # persona:
+            #       [
+            #               p1_w1, p1_w2, p1_w3,
+            #               p2_w1, p2_w2, p2_w3,
+            #               p3_w1, p3_w3, p3_w3,
+            #               p4_w1, p4_w4, p4_w3,
+            #           INFO_EOS,
+            #       ]
+            persona_info, dialog = self.data[idx]
+            if len(persona_info):
+                n_info_samples = max(self.min_infos, random.randint(1, len(persona_info)))
+                n_info_samples = min(n_info_samples, len(persona_info))
+                persona_info = random.sample(persona_info, n_info_samples)
+                random.shuffle(persona_info)
+                # mode_sep
+                persona_info = [p_info[: self.max_lengths - 1] for p_info in persona_info]
+                while len(sum(persona_info, [])) > (self.max_lengths - 1):
+                    persona_info.pop()
+
+                persona_info = sum(persona_info, [])
+                persona_info = persona_info + [self.vocab.info_eos_id]
+
+            assert len(persona_info) <= self.max_lengths, "Too large len of a persona"
+
+            # dialog:
+            #       [
+            #           t1_w1, t1_w2, t1_w3, TALKER1_EOS
+            #           t2_w1, t2_w2, t2_w3, TALKER2_EOS
+            #           t1_w1, t1_w2, t1_w3, TALKER1_EOS
+            #       ]
+            dialog_begin = 0
+            dialog_end = random.randrange(2, len(dialog) + 1, 2)
+            pre_h = []
+            for i, ids in enumerate(dialog[dialog_begin : dialog_end - 1], 1):
+                ids = ids[: self.max_lengths - 1]
+                if i % 2 == 1:
+                    ids = ids + [self.vocab.talker1_eos_id]
+                else:
+                    ids = ids + [self.vocab.talker2_eos_id]
+                pre_h.append(ids)
+            while len(sum(pre_h, [])) > self.max_lengths:
+                pre_h.pop(0)
+
+
+            h = []
+            [h.extend(i) for i in pre_h]
+            assert len(h) <= self.max_lengths, "Too large len of a dialog"
+
+            # answer:
+            #       [BOS, t1_w1, t1_w2, t1_w3, EOS,]
+            y = (
+                [self.vocab.bos_id]
+                + dialog[dialog_end - 1][: self.max_lengths - 3]
+                + [self.vocab.eos_id]
+            )
 
         return persona_info, h, y

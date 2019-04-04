@@ -221,7 +221,6 @@ class BertBPEVocab:
 
     def __init__(self, tokenizer):
         # TODO: add check for special tokens
-        tokenizer
         self.spec_tokens = [BertBPEVocab.pad_token, BertBPEVocab.bos_token, BertBPEVocab.eos_token,
                             BertBPEVocab.info_bos, BertBPEVocab.info_eos, BertBPEVocab.talker1_bos,
                             BertBPEVocab.talker1_eos, BertBPEVocab.talker2_bos, BertBPEVocab.talker2_eos,
@@ -283,6 +282,10 @@ class BertBPEVocab:
     @property
     def sep_id(self):
         return self.token2id[BertBPEVocab.sep_token]
+
+    @property
+    def cls_id(self):
+        return self.token2id[BertBPEVocab.cls_token]
 
     def string2ids(self, string):
         tokens = self.tokenizer.tokenize(string)

@@ -25,10 +25,10 @@ import numpy as np
 class MultiheadAttention(nn.Module):
     @classmethod
     def _get_future_mask(cls, size, device):
-        if not hasattr(cls, '_future_mask') or cls._future_mask.device != device or cls._future_mask.shape < size:
+        if not hasattr(cls, "_future_mask") or cls._future_mask.device != device or cls._future_mask.shape < size:
             cls._future_mask = torch.triu(torch.ones(size[0], size[1], dtype=torch.uint8, device=device), 1)
 
-        mask = cls._future_mask[:size[0], :size[1]]
+        mask = cls._future_mask[: size[0], : size[1]]
 
         return mask
 
@@ -59,10 +59,10 @@ class MultiheadAttention(nn.Module):
 
         if apply_future_mask:
             future_mask = MultiheadAttention._get_future_mask(w.shape[-2:], w.device).unsqueeze(0).unsqueeze(0)
-            w.masked_fill_(future_mask, float('-inf'))
+            w.masked_fill_(future_mask, float("-inf"))
 
         if padding_mask is not None:
-            w.masked_fill_(padding_mask.unsqueeze(1).unsqueeze(2), float('-inf'))
+            w.masked_fill_(padding_mask.unsqueeze(1).unsqueeze(2), float("-inf"))
 
         w = F.softmax(w, dim=-1)
         w = self.dropout(w)
@@ -81,16 +81,16 @@ class MultiheadAttention(nn.Module):
         return x
 
     def forward(self, query, key, value, padding_mask):
-        qkv_same = (query.data_ptr() == key.data_ptr() == value.data_ptr())
-        kv_same = (key.data_ptr() == value.data_ptr())
+        qkv_same = query.data_ptr() == key.data_ptr() == value.data_ptr()
+        kv_same = key.data_ptr() == value.data_ptr()
 
         if qkv_same:
             query, key, value = self.qkv_proj(query).split(self.n_features, dim=-1)
             apply_future_mask = True  # self-attention
         elif kv_same:
-            q_w, q_b = self.qkv_proj.weight[:self.n_features, :], self.qkv_proj.bias[:self.n_features]
+            q_w, q_b = self.qkv_proj.weight[: self.n_features, :], self.qkv_proj.bias[: self.n_features]
             query = F.linear(query, q_w, q_b)
-            kv_w, kv_b = self.qkv_proj.weight[self.n_features:, :], self.qkv_proj.bias[self.n_features:]
+            kv_w, kv_b = self.qkv_proj.weight[self.n_features :, :], self.qkv_proj.bias[self.n_features :]
             key, value = F.linear(key, kv_w, kv_b).split(self.n_features, dim=-1)
             apply_future_mask = False
         else:
@@ -145,16 +145,16 @@ class TransformerBlock(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x, padding_mask, *contexts):
-        '''contexts = [(context1, padding_mask1), ...]'''
+        """contexts = [(context1, padding_mask1), ...]"""
 
         inputs = (x, padding_mask) + contexts
 
         full_attn = 0
         n_attn = len(inputs) // 2
         for i in range(0, len(inputs), 2):
-            c, m = inputs[i], inputs[i+1].byte()
+            c, m = inputs[i], inputs[i + 1].byte()
             a = self.attn(x, c, c, m)
-            full_attn += (a / n_attn)
+            full_attn += a / n_attn
 
         full_attn = self.dropout(full_attn)
         x = self.attn_norm(x + full_attn)
@@ -184,17 +184,29 @@ class TransformerBlock(nn.Module):
 
 
 class TransformerModule(nn.Module):
-    def __init__(self, n_layers, n_embeddings, n_pos_embeddings, embeddings_size,
-                 padding_idx, n_heads, dropout, embed_dropout, attn_dropout, ff_dropout,
-                 n_segments=None,
-                 bert_mode=False,
-                 type_vocab_size=4,
-                 info_bos_id=1,
-                 talker1_bos_id=3,
-                 talker2_bos_id=5,
-                 bos_token_id=7,
-                 sep_token_id=102,
-                 ):
+    def __init__(
+        self,
+        n_layers,
+        n_embeddings,
+        n_pos_embeddings,
+        embeddings_size,
+        padding_idx,
+        n_heads,
+        dropout,
+        embed_dropout,
+        attn_dropout,
+        ff_dropout,
+        n_segments=None,
+        bert_mode=False,
+        type_vocab_size=4,
+        info_bos_id=1,
+        talker1_bos_id=3,
+        talker1_eos_id=4,
+        talker2_bos_id=5,
+        talker2_eos_id=6,
+        bos_token_id=7,
+        sep_token_id=102,
+    ):
         super(TransformerModule, self).__init__()
 
         self.embeddings = nn.Embedding(n_embeddings, embeddings_size, padding_idx=padding_idx)
@@ -208,7 +220,9 @@ class TransformerModule(nn.Module):
 
             self.info_bos_id = info_bos_id
             self.talker1_bos_id = talker1_bos_id
+            self.talker1_eos_id = talker1_eos_id
             self.talker2_bos_id = talker2_bos_id
+            self.talker2_eos_id = talker2_eos_id
             self.bos_token_id = bos_token_id
 
             self.sep_token_id = sep_token_id
@@ -218,7 +232,9 @@ class TransformerModule(nn.Module):
         else:
             self.pos_embeddings = nn.Embedding(n_pos_embeddings + 1, embeddings_size, padding_idx=0)
         self.embed_dropout = nn.Dropout(embed_dropout)
-        self.layers = nn.ModuleList([TransformerBlock(embeddings_size, n_heads, dropout, attn_dropout, ff_dropout) for _ in range(n_layers)])
+        self.layers = nn.ModuleList(
+            [TransformerBlock(embeddings_size, n_heads, dropout, attn_dropout, ff_dropout) for _ in range(n_layers)]
+        )
         self.n_segments = n_segments
         self.bert_mode = bert_mode
 
@@ -229,46 +245,77 @@ class TransformerModule(nn.Module):
         nn.init.normal_(self.pos_embeddings.weight, std=0.02)
         nn.init.normal_(self.type_embeddings.weight, std=0.02)
 
-    @staticmethod
-    def index_search(from_array, spec_id):
-        positions = np.where(from_array == spec_id)
-        list_positions = [[] for _ in range(from_array.shape[0])]
-        for i, j in zip(*positions):
-            list_positions[i].append(j)
-        list_positions = [np.array(l, dtype=np.int) for l in list_positions]
-        return list_positions
+    # @staticmethod
+    # def index_search(from_array, spec_id):
+    #     positions = np.where(from_array == spec_id)
+    #     list_positions = [[] for _ in range(from_array.shape[0])]
+    #     for i, j in zip(*positions):
+    #         list_positions[i].append(j)
+    #     list_positions = [np.array(l, dtype=np.int) for l in list_positions]
+    #     return list_positions
 
-    @staticmethod
-    def create_type_tensor(ranges, emb_ids, types_indexes):
-        type_ids = np.zeros_like(emb_ids)
-        for i, _range in enumerate(ranges):
-            start_range = _range[:-1] + 1
-            start_range[0] = 0
-            end_range = _range[1:] + 1
-            end_range[-1] = emb_ids.shape[-1]
-            for start, end in zip(start_range, end_range):
-                for type_id, type_indexes in enumerate(types_indexes):
-                    if np.any((start <= type_indexes[i]) & (type_indexes[i] < end)):
-                        type_ids[i, start:end+2] = type_id
-        return type_ids
+    # @staticmethod
+    # def create_type_tensor(ranges, emb_ids, types_indexes):
+    #     type_ids = np.zeros_like(emb_ids)
+    #     for i, _range in enumerate(ranges):
+    #         start_range = _range[:-1] + 1
+    #         start_range[0] = 0
+    #         end_range = _range[1:] + 1
+    #         end_range[-1] = emb_ids.shape[-1]
+    #         for start, end in zip(start_range, end_range):
+    #             for type_id, type_indexes in enumerate(types_indexes):
+    #                 if np.any((start <= type_indexes[i]) & (type_indexes[i] < end)):
+    #                     type_ids[i, start : end + 2] = type_id
+    #     return type_ids
 
-    def _gen_type_embed_inds(self, emb_ids):
-        is_cuda = emb_ids.is_cuda
+    # def _gen_type_embed_inds(self, emb_ids):
+    #     is_cuda = emb_ids.is_cuda
 
-        emb_ids = emb_ids.cpu().numpy()
-        ranges = TransformerModule.index_search(emb_ids, self.sep_token_id)
-        ranges = [np.concatenate(([0], _range, [emb_ids.shape[-1]]), axis=None)for _range in ranges]
-        types_indexes = []
-        types_indexes.append(TransformerModule.index_search(emb_ids, self.info_bos_id))
-        types_indexes.append(TransformerModule.index_search(emb_ids, self.talker1_bos_id))
-        types_indexes.append(TransformerModule.index_search(emb_ids, self.talker2_bos_id))
-        types_indexes.append(TransformerModule.index_search(emb_ids, self.bos_token_id))
-        type_ids = TransformerModule.create_type_tensor(ranges, emb_ids, types_indexes)
-        type_ids = torch.from_numpy(type_ids)
+    #     emb_ids = emb_ids.cpu().numpy()
+    #     import pdb; pdb.set_trace()
+    #     ranges = TransformerModule.index_search(emb_ids, self.sep_token_id)
+    #     ranges = [np.concatenate(([0], _range, [emb_ids.shape[-1]]), axis=None)for _range in ranges]
+    #     types_indexes = []
+    #     types_indexes.append(TransformerModule.index_search(emb_ids, self.info_bos_id))
+    #     types_indexes.append(TransformerModule.index_search(emb_ids, self.talker1_bos_id))
+    #     types_indexes.append(TransformerModule.index_search(emb_ids, self.talker2_bos_id))
+    #     types_indexes.append(TransformerModule.index_search(emb_ids, self.bos_token_id))
+    #     type_ids = TransformerModule.create_type_tensor(ranges, emb_ids, types_indexes)
+    #     type_ids = torch.from_numpy(type_ids)
+    #     if is_cuda:
+    #         type_ids = type_ids.cuda()
+
+    #     return type_ids
+    #   0 - info / persona of talker2
+    #   1 - utterence of talker1
+    #   2 - utterence of talker2
+    #   3 - generated answer of talker2
+    def _get_segmet_ids(self, sub_token_ids):
+        is_cuda = sub_token_ids.is_cuda
+
+        sub_token_ids = sub_token_ids.cpu().numpy()
+        seg_ids = []
+        for batch_item in sub_token_ids:
+            if np.isin([self.info_bos_id], batch_item)[0]:
+                seg_ids.append(np.full_like(batch_item, 0))
+            elif np.isin([self.bos_token_id], batch_item)[0]:
+                seg_ids.append(np.full_like(batch_item, 3))
+            elif np.isin([self.talker1_eos_id], batch_item)[0]:
+                _seg_ids = []
+                for utter_set in np.split(batch_item, np.where(batch_item == self.talker1_eos_id)[0] + 1):
+                    utters = np.split(utter_set, np.where(utter_set == self.talker2_eos_id)[0] + 1)
+                    for array, seg_id in zip(utters, [1] if len(utters) == 1 else [2, 1]):
+                        _seg_ids.append(np.full_like(array, seg_id))
+                seg_ids.append(np.concatenate(_seg_ids))
+            else:
+                seg_ids.append(np.full_like(batch_item, 3))
+        seg_ids = np.stack(seg_ids)
+
+        seg_ids = torch.from_numpy(seg_ids)
         if is_cuda:
-            type_ids = type_ids.cuda()
+            seg_ids = seg_ids.cuda()
 
-        return type_ids
+        return seg_ids
 
     def forward(self, x, enc_contexts=[]):
         padding_mask = x.eq(self.embeddings.padding_idx)
@@ -277,7 +324,7 @@ class TransformerModule(nn.Module):
 
         if self.bert_mode:
             if self.n_segments:
-                types = self._gen_type_embed_inds(x)
+                types = self._get_segmet_ids(x)
                 x = self.embeddings(x) + self.pos_embeddings(positions) + self.type_embeddings(types)
                 x = self.embed_norm(x)
             else:

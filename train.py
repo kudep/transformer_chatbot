@@ -78,26 +78,28 @@ def main():
             )
         else:
             logger.info("Weights loading from {}".format(trainer_config.tf_bert_model_load_from))
-            load_from_bert(transformer.transformer_module, len(vocab), model_config, trainer_config)
+            load_from_bert(transformer.transformer_module, vocab, model_config, trainer_config)
 
     logger.info("Test data loading ")
     test_dataset = FacebookDataset(
         trainer_config.test_datasets,
         vocab,
-        transformer.n_pos_embeddings - 1,
+        model_config.max_seq_len,
         sep_id_enable=model_config.sep_id_enable,
         cpu_n=trainer_config.n_jobs,
         cache_file=trainer_config.test_datasets_cache,
+        input_token_mode=trainer_config.input_token_mode,
     )
 
     logger.info("Train data loading ")
     train_dataset = FacebookDataset(
         trainer_config.train_datasets,
         vocab,
-        transformer.n_pos_embeddings - 1,
+        model_config.max_seq_len,
         sep_id_enable=model_config.sep_id_enable,
         cpu_n=trainer_config.n_jobs,
         cache_file=trainer_config.train_datasets_cache,
+        input_token_mode=trainer_config.input_token_mode,
     )
     model_trainer = Trainer(
         transformer,
@@ -149,8 +151,8 @@ def main():
             dialog_str = vocab.ids2string(dialog)
             dialog_str = dialog_str.replace(vocab.talker1_bos, "\n\t- ").replace(vocab.talker2_bos, "\n\t- ")
             dialog_str = dialog_str.replace(vocab.talker1_eos, "").replace(vocab.talker2_eos, "")
-            if model_config.sep_id_enable:
-                dialog_str = dialog_str.replace(vocab.sep_token, "")
+            for special_token_id in vocab.special_tokens_ids:
+                dialog_str = dialog_str.replace(special_token_id, "")
             target_str = vocab.ids2string(target[1:-1])
             prediction_str = vocab.ids2string(prediction)
 
@@ -207,22 +209,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-# # %%
-# from scipy.stats import entropy
-# from numpy.linalg import norm
-# import numpy as np
-# import random
-
-# def JSD(P, Q):
-#     _P = P / norm(P, ord=1)
-#     _Q = Q / norm(Q, ord=1)
-#     _M = 0.5 * (_P + _Q)
-#     return 0.5 * (entropy(_P, _M) + entropy(_Q, _M))
-
-# # %%
-# a = list(range(100))
-# random.shuffle(a)
-# JSD(np.array(list(range(100))),a )
-
-# # %%

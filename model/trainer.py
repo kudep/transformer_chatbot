@@ -209,7 +209,7 @@ class Trainer:
             embeddings = self._mean4hist(self.model.transformer_module.embeddings)
             tensors.append(embeddings)
             self.tb_writer.add_histogram("optimizer/grads/embeddings", embeddings, self.optimizer._step)
-            if self.model.transformer_module.bert_mode:
+            if self.model.transformer_module.n_segments:
                 type_embeddings = self._mean4hist(self.model.transformer_module.type_embeddings)
                 tensors.append(type_embeddings)
                 self.tb_writer.add_histogram("optimizer/grads/type_embeddings", type_embeddings, self.optimizer._step)
