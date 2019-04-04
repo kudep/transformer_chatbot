@@ -1,0 +1,41 @@
+
+start_cmd='bash start_scripts/mini_experiments.v4.sh'
+export CUDA_VISIBLE_DEVICES=1
+{
+$start_cmd MINI_V4_BASELINE_BT_L3_TW1_SEG1_V40_ShedLR0_SpecT0_SpecTReinit0_manSL128
+$start_cmd MINI_V4_BT_L3_TW1_SEG1_V40_ShedLR0_SpecT1_CS_SpecTReinit0_manSL128
+}&
+export CUDA_VISIBLE_DEVICES=2
+{
+$start_cmd MINI_V4_BT_L3_TW1_SEG1_V40_ShedLR0_SpecT1_S_SpecTReinit0_manSL128
+$start_cmd MINI_V4_BT_L3_TW1_SEG1_V40_ShedLR0_SpecT1_deleteCS_SpecTReinit0_manSL128
+}&
+export CUDA_VISIBLE_DEVICES=3
+{
+$start_cmd MINI_V4_BT_L3_TW1_SEG1_V40_ShedLR0_SpecT1_deleteCSB_SpecTReinit0_manSL128
+$start_cmd MINI_V4_BT_L3_TW1_SEG1_V40_ShedLR0_SpecT1_CS_SpecTReinit1_EB_manSL128
+}&
+export CUDA_VISIBLE_DEVICES=4
+{
+$start_cmd MINI_V4_BT_L3_TW1_SEG1_V40_ShedLR0_SpecT1_CS_SpecTReinit1_B_manSL128
+$start_cmd MINI_V4_BT_L3_TW1_SEG1_V40_ShedLR0_SpecTReinit1_B_manSL128
+}&
+export CUDA_VISIBLE_DEVICES=5
+{
+$start_cmd MINI_V4_BT_L3_TW1_SEG1_V40_ShedLR0_SpecTReinit1_E_manSL128
+$start_cmd MINI_V4_BR_L3_TW1_SEG1_V40_ShedLR0_SpecTReinit0_manSL128
+}&
+export CUDA_VISIBLE_DEVICES=6
+{
+$start_cmd MINI_V4_BT_L3_TW1_SEG0_V40_ShedLR0_SpecTReinit0_manSL128
+$start_cmd MINI_V4_BT_L3_TW1_SEG1_V40_ShedLR16_SpecTReinit0_manSL128
+}&
+export CUDA_VISIBLE_DEVICES=7
+{
+$start_cmd MINI_V4_BT_L3_TW1_SEG1_V40_ShedLR64_SpecTReinit0_manSL128
+$start_cmd MINI_V4_BT_L3_TW1_SEG1_V40_ShedLR1_SpecTReinit0_manSL128
+}&
+export CUDA_VISIBLE_DEVICES=8
+{
+$start_cmd MINI_V4_BT_L3_TW1_SEG1_V40_ShedLR0_SpecTReinit0_manSL256
+}&
