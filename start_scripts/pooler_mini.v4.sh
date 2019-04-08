@@ -37,5 +37,5 @@ $start_cmd MINI_V4_BT_L3_TW1_SEG1_V40_ShedLR1_SpecTReinit0_manSL128
 }&
 export CUDA_VISIBLE_DEVICES=8
 {
-# $start_cmd MINI_V4_BT_L3_TW1_SEG1_V40_ShedLR0_SpecTReinit0_manSL256
+echo "not start $start_cmd MINI_V4_BT_L3_TW1_SEG1_V40_ShedLR0_SpecTReinit0_manSL256"
 }&
