@@ -9,6 +9,27 @@ case "$signature" in
 # mode_without_cls_sep
 # mode_without_cls_sep_bos
 
+ "MINI_V4_TEST" )
+ python train.py \
+  --lr_warmup 16000 \
+  --signature "$signature" \
+  --segment_embedding 1 \
+  --tie_weights 1 \
+  --n_layers 3 \
+  --path2bert_vocab ${bert_dir}/std_lm_vocab.40k.txt \
+  --tf_bert_model_load_from ${bert_dir}/bert_model.ckpt \
+  --train_from "datasets/sber_srt_toloka_alice_samples.v3_tiny/*.valid.txt" \
+  --valid_from "datasets/sber_srt_toloka_alice_samples.v3_tiny/*.valid.txt" \
+  --batch_split 32 \
+  --lm_weight 0.1 \
+  --lr_freq 0 \
+  --risk_weight 0 \
+  --input_token_mode default \
+  --spec_token_reinit '' \
+  --n_epochs 5 \
+  --max_seq_len 128 \
+ ;;
+
  "MINI_V4_BASELINE_BT_L3_TW1_SEG1_V40_ShedLR0_SpecT0_SpecTReinit0_manSL128" )
  python train.py \
   --lr_warmup 16000 \

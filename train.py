@@ -151,8 +151,8 @@ def main():
             dialog_str = vocab.ids2string(dialog)
             dialog_str = dialog_str.replace(vocab.talker1_bos, "\n\t- ").replace(vocab.talker2_bos, "\n\t- ")
             dialog_str = dialog_str.replace(vocab.talker1_eos, "").replace(vocab.talker2_eos, "")
-            for special_token_id in vocab.special_tokens_ids:
-                dialog_str = dialog_str.replace(special_token_id, "")
+            for spec_token in vocab.spec_tokens:
+                dialog_str = dialog_str.replace(spec_token, "")
             target_str = vocab.ids2string(target[1:-1])
             prediction_str = vocab.ids2string(prediction)
 
