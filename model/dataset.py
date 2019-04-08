@@ -208,12 +208,8 @@ class FacebookDataset:
                 else:
                     ids = [self.vocab.talker2_bos_id] + ids + [self.vocab.talker2_eos_id]
                 pre_h.append(ids)
-            l1 = len(pre_h)
             while len(sum(pre_h, [])) > (self.max_lengths - 1):
                 pre_h.pop(0)
-            if l1 != len(pre_h):
-                print(f'len(sum(pre_h, []) = {len(sum(pre_h, []))}')
-                print(f'self.max_lengths = {self.max_lengths}')
 
 
             h = [self.vocab.cls_id]
